@@ -1,0 +1,46 @@
+# OS / Editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build or output files
+*.log
+*.db
+*.sqlite
+*.csv
+*.h5
+*.npy
+*.npz
+
+# Temporary or generated data
+data/
+results/
+tmp/
+__temp__/
+
+# Jupyter notebooks checkpoints (if you ever add notebooks)
+.ipynb_checkpoints/
+
+# Arduino build files
+*.hex
+*.bin
+
+# Image cache / analysis outputs (optional)
+*.tiff
+*.tif
+*.jpg
+*.png
+
+# Keep static stimuli only
+!src/static_stim/*.png
