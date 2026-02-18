@@ -26,8 +26,8 @@ import multiprocessing as mp
 import pyaudio
 import msgpack
 import msgpack_numpy as m
-m.patch()
 
+m.patch()
 
 from functools import partial
 from npsocket import NPSocket
@@ -45,6 +45,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel,
 # Note you should track down errors and catch them.
 def my_excepthook(type, value, tback):
     sys.__excepthook__(type, value, tback)
+
 
 sys.excepthook = my_excepthook
 
@@ -214,7 +215,6 @@ class WorkerSessionControlThread(QObject):
     thread_open_session = False
     pause_session = False
 
-
     # sgi: session general info
     def __init__(self, sgi, state_list, event_stream,
                  path_to_dir=None, thread_testing=False):
@@ -242,30 +242,37 @@ class WorkerSessionControlThread(QObject):
         if self.session_type == 'Exposure':
             self.total_trials = self.end_action_vector
         else:
-            self.total_trials = self.end_action_vector/4
-
+            self.total_trials = self.end_action_vector / 4
+        # how long to run trials based on session type
         if self.session_type == 'Diff LGT Cue ITI 1':
-            self.time_limit = self.total_trials*60 + 480
-        elif self.session_type in ['Fixed Cue 2a', 'Fixed Cue 2a Imaging', 'Fixed Cue Switch', 'Fixed No Cue',
-                                   'Fixed No Cue Imaging', 'Fixed Cue Rotate', 'Dark Reverse', 'Dark Detour',
+            self.time_limit = self.total_trials * 60 + 480
+        elif self.session_type in ['Fixed Cue 2a', 'Fixed Cue 2a Imaging', 'Fixed Cue On 2a Imaging',
+                                   'Fixed Cue Switch', 'Fixed No Cue',
+                                   'Fixed No Cue Imaging', 'Fixed No Cue Switch Imaging', 'Fixed Cue Rotate',
+                                   'Dark Reverse', 'Dark Detour', 'Fixed No Cue Detour Imaging', 'Fixed No Cue Detour',
                                    'Dark Detour No Cue', 'Rotate Detour', 'Rotate Reverse', 'Rotate Detour Moving',
-                                   'Fixed Cue Rotate Imaging', 'Fixed Cue Switch Imaging', 'Rotate Detour Imaging',
-                                   'Rotate Detour Moving Imaging', 'Rotate Reverse Imaging','Rotate Detour 1b Moving',
-                                   'Rotate Detour 1b Moving Imaging', 'Fixed Cue 2b', 'Fixed Cue 3a']:
-            self.time_limit = self.total_trials*180
+                                   'Fixed Cue Rotate Imaging', 'Fixed Cue Switch Imaging',
+                                   'Fixed Cue On Switch Imaging',
+                                   'Rotate Detour Imaging', 'Rotate Detour Moving Imaging', 'Rotate Reverse Imaging',
+                                   'Rotate Detour 1b Moving',
+                                   'Rotate Detour 1b Moving Imaging', 'Fixed Cue 2b', 'Fixed Cue 3a',
+                                   'Fixed Cue Novel Route Twist', 'Fixed No Cue Twist', 'Fixed Cue Rotate Twist',
+                                   'Fixed Cue Switch Twist', 'Fixed Cue 1 Imaging', 'Fixed Cue On 1 Imaging']:
+            self.time_limit = self.total_trials * 180  # Maybe update to deal with added trials situation
         elif self.session_type == 'Exposure':
-            self.time_limit = self.total_trials*60-60
+            self.time_limit = self.total_trials * 60 - 60
         else:
-            self.time_limit = 60*48
+            self.time_limit = 60 * 48
 
         self.path_to_data_session = (
-                    path_to_dir + '/' + sgi['subject_name'] + '_' + 'sess_data' + '_' + sgi['session_number'] + '_' +
-                    sgi['date'].replace('/', '') + '_' + sgi['time'].replace(':', '') + '.csv')
+                path_to_dir + '/' + sgi['subject_name'] + '_' + 'sess_data' + '_' + sgi['session_number'] + '_' +
+                sgi['date'].replace('/', '') + '_' + sgi['time'].replace(':', '') + '.csv')
         self.path_to_data_trial = (
-                    path_to_dir + '/' + sgi['subject_name'] + '_' + 'trial_data' + '_' + sgi['session_number'] + '_' +
-                    sgi['date'].replace('/', '') + '_' + sgi['time'].replace(':', '') + '.csv')
+                path_to_dir + '/' + sgi['subject_name'] + '_' + 'trial_data' + '_' + sgi['session_number'] + '_' +
+                sgi['date'].replace('/', '') + '_' + sgi['time'].replace(':', '') + '.csv')
         self.total_errors = 0
         self.score_string = ''
+        self.score_last_sixteen = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         self.score_last_eight = [0, 0, 0, 0, 0, 0, 0, 0]
         self.reward_zone = None
 
@@ -277,7 +284,7 @@ class WorkerSessionControlThread(QObject):
         trials_perfect = 0
         total_errors = 0
         total_switches = 0
-        #past_goals = []
+        # past_goals = []
         if self.session_type == 'Exposure':
             goal_location = 'none'
         elif self.action_vector_list[3][23] == 1:
@@ -289,118 +296,54 @@ class WorkerSessionControlThread(QObject):
         elif self.action_vector_list[3][26] == 1:
             goal_location = 'NW'
 
-        #past_goals.append(goal_location)
-        goal_list = ['NE','SE','SW','NW']
+        # past_goals.append(goal_location)
+        goal_list = ['NE', 'SE', 'SW', 'NW']
         self.score_string += goal_location
         if self.action_vector_read[self.action_idx - 1][9] == 'Fixed Switch 1':
-            trial_switch_check = 23 #random.randint(21,28)
+            trial_switch_check = 23  # random.randint(21,28)
+            print('switch check: ', trial_switch_check)
         elif self.action_vector_read[self.action_idx - 1][9] == 'Fixed Switch N':
-            trial_switch_check = 8 #random.randint(9,12)
+            trial_switch_check = 8  # random.randint(9,12)
+            print('switch check: ', trial_switch_check)
         elif self.action_vector_read[self.action_idx - 1][9] == 'Diff LGT Switch':
-            trial_switch_check = 16 
-        elif self.action_vector_read[self.action_idx - 1][9] in ['Fixed Cue Switch', 'Dark Reverse', 'Rotate Reverse',
-                                                                 'Fixed Cue Switch Imaging', 'Rotate Reverse Imaging']:
             trial_switch_check = 16
+            print('switch check: ', trial_switch_check)
+        elif self.action_vector_read[self.action_idx - 1][9] in ['Fixed Cue Switch', 'Dark Reverse', 'Rotate Reverse',
+                                                                 'Rotate Reverse Imaging', 'Fixed Cue Switch Twist',
+                                                                 'Fixed No Cue Switch Imaging',
+                                                                 'Fixed Cue Switch Imaging',
+                                                                 'Fixed Cue On Switch Imaging'
+                                                                 ]:
+            trial_switch_check = 16
+            print('switch check: ', trial_switch_check)
+        elif self.action_vector_read[self.action_idx - 1][9] in ['Fixed No Cue Detour Imaging','Fixed Cue 2a Imaging','Fixed Cue On 2a Imaging']:
+            trial_detour_check = 16
+            print('detour check: ', trial_detour_check)
         else:
             trial_switch_check = 0
-        print(trial_switch_check)
+
         if 'Imaging' in self.session_type:
             print('imaging session')
         else:
             print('This is not an imaging session')
         trial_switch_1 = False
+        trial_switch_2 = False
+        trial_detour = False
         self.time_start = time.time()
 
-        # session run loop
+        # MAIN CONTROL LOOP FOR SESSION RUN
         while self.thread_open_session:
             self.pause_run()
-            # Code to check if reward shifting session and if so then check if criteria to switch
+            # Code to check if reward switching session and if so then check if criteria to switch
             if (trial_switch_1 == False and
-                self.action_vector_list[self.action_idx][0] == 1 and
-                self.action_vector_read[self.action_idx - 1][9] == 'Fixed Switch 1' and
-                trial_number >= trial_switch_check and
-                trials_perfect/trial_number >= 0.58):
+                    self.action_vector_list[self.action_idx][0] == 1 and
+                    self.action_vector_read[self.action_idx - 1][9] == 'Fixed Switch 1' and
+                    trial_number >= trial_switch_check and
+                    trials_perfect / trial_number >= 0.58):
                 goal_list.remove(goal_location)
                 new_goal = random.choice(goal_list)
-                #past_goals.append(new_goal)
-                print(new_goal)
-                if new_goal == 'NE':
-                    trig_zone = 21
-                    goal_vector_list = [1,0,0,0]
-                    goal_read = 'Northeast'
-                elif new_goal == 'SE':
-                    trig_zone = 17
-                    goal_vector_list = [0,1,0,0]
-                    goal_read = 'Southeast'
-                elif new_goal == 'SW':
-                    trig_zone = 1
-                    goal_vector_list = [0,0,1,0]
-                    goal_read = 'Southwest'
-                elif new_goal =='NW':
-                    trig_zone = 5
-                    goal_read = 'Northwest'
-                    goal_vector_list = [0,0,0,1]
-                #Update action vectors with new reward location
-                for i, act_vec in enumerate(self.action_vector_list[self.action_idx:]):
-                    self.action_vector_read[self.action_idx+i][5] = goal_read
-                    if act_vec[0] == 4:
-                        act_vec[1] = trig_zone
-                        act_vec[23:27] = goal_vector_list
-                self.update_vector_lists.emit(self.action_vector_list, self.action_vector_read)
-                total_switches += 1
-                trial_switch_1 = True
-            elif(self.action_vector_list[self.action_idx][0] == 1 and
-                 self.action_vector_read[self.action_idx - 1][9] == 'Fixed Switch N' and
-                 trial_number >= trial_switch_check and
-                 sum(self.score_last_eight) >= 7):
-                print('switch code start')
-                temp_goal = goal_location
-                while goal_location == temp_goal:
-                    temp_goal = random.choice(goal_list)
-                print(temp_goal)
-                #past_goals.append(temp_goal)
-                # if past_goals.count(temp_goal) >= 2:
-                #     goal_list.remove(temp_goal)
-                goal_location = temp_goal
-                if goal_location == 'NE':
-                    trig_zone = 21
-                    goal_vector_list = [1,0,0,0]
-                    goal_read = 'Northeast'
-                elif goal_location == 'SE':
-                    trig_zone = 17
-                    goal_vector_list = [0,1,0,0]
-                    goal_read = 'Southeast'
-                elif goal_location == 'SW':
-                    trig_zone = 1
-                    goal_vector_list = [0,0,1,0]
-                    goal_read = 'Southwest'
-                elif goal_location =='NW':
-                    trig_zone = 5
-                    goal_read = 'Northwest'
-                    goal_vector_list = [0,0,0,1]
-                for i, act_vec in enumerate(self.action_vector_list[self.action_idx:]):
-                    self.action_vector_read[self.action_idx+i][5] = goal_read
-                    if act_vec[0] == 4:
-                        act_vec[1] = trig_zone
-                        act_vec[23:27] = goal_vector_list
-                self.update_vector_lists.emit(self.action_vector_list, self.action_vector_read)
-                trial_switch_check = trial_number + 8
-                total_switches += 1
-            elif (trial_switch_1 == False and
-                self.action_vector_list[self.action_idx][0] == 1 and
-                self.action_vector_read[self.action_idx - 1][9] in ['Fixed Cue Switch', 'Dark Reverse',
-                                                                    'Fixed Cue Switch Imaging'] and
-                trial_number >= trial_switch_check):
-                if goal_location == 'NE':
-                    new_goal = 'SW'
-                elif goal_location == 'SE':
-                    new_goal = 'NW'
-                elif goal_location == 'SW':
-                    new_goal = 'NE'
-                elif goal_location == 'NW':
-                    new_goal = 'SE'
                 # past_goals.append(new_goal)
-                print('Switch')
+                print(new_goal)
                 if new_goal == 'NE':
                     trig_zone = 21
                     goal_vector_list = [1, 0, 0, 0]
@@ -426,12 +369,178 @@ class WorkerSessionControlThread(QObject):
                 self.update_vector_lists.emit(self.action_vector_list, self.action_vector_read)
                 total_switches += 1
                 trial_switch_1 = True
+            elif (self.action_vector_list[self.action_idx][0] == 1 and
+                  self.action_vector_read[self.action_idx - 1][9] == 'Fixed Switch N' and
+                  trial_number >= trial_switch_check and
+                  sum(self.score_last_eight) >= 7):
+                print('switch code start')
+                temp_goal = goal_location
+                while goal_location == temp_goal:
+                    temp_goal = random.choice(goal_list)
+                print(temp_goal)
+                goal_location = temp_goal
+                if goal_location == 'NE':
+                    trig_zone = 21
+                    goal_vector_list = [1, 0, 0, 0]
+                    goal_read = 'Northeast'
+                elif goal_location == 'SE':
+                    trig_zone = 17
+                    goal_vector_list = [0, 1, 0, 0]
+                    goal_read = 'Southeast'
+                elif goal_location == 'SW':
+                    trig_zone = 1
+                    goal_vector_list = [0, 0, 1, 0]
+                    goal_read = 'Southwest'
+                elif goal_location == 'NW':
+                    trig_zone = 5
+                    goal_read = 'Northwest'
+                    goal_vector_list = [0, 0, 0, 1]
+                for i, act_vec in enumerate(self.action_vector_list[self.action_idx:]):
+                    self.action_vector_read[self.action_idx + i][5] = goal_read
+                    if act_vec[0] == 4:
+                        act_vec[1] = trig_zone
+                        act_vec[23:27] = goal_vector_list
+                self.update_vector_lists.emit(self.action_vector_list, self.action_vector_read)
+                trial_switch_check = trial_number + 8
+                total_switches += 1
+            elif (trial_switch_1 == False and
+                  self.action_vector_list[self.action_idx][0] == 1 and
+                  self.action_vector_read[self.action_idx - 1][9] in ['Fixed Cue Switch', 'Dark Reverse',
+                                                                      'Fixed Cue Switch Twist'] and
+                  trial_number >= trial_switch_check):
+                if goal_location == 'NE':
+                    new_goal = 'SW'
+                elif goal_location == 'SE':
+                    new_goal = 'NW'
+                elif goal_location == 'SW':
+                    new_goal = 'NE'
+                elif goal_location == 'NW':
+                    new_goal = 'SE'
+                # past_goals.append(new_goal)
+                print('Switch 1')
+                print('Old goal switched to:', new_goal)
+                if new_goal == 'NE':
+                    trig_zone = 21
+                    goal_vector_list = [1, 0, 0, 0]
+                    goal_read = 'Northeast'
+                elif new_goal == 'SE':
+                    trig_zone = 17
+                    goal_vector_list = [0, 1, 0, 0]
+                    goal_read = 'Southeast'
+                elif new_goal == 'SW':
+                    trig_zone = 1
+                    goal_vector_list = [0, 0, 1, 0]
+                    goal_read = 'Southwest'
+                elif new_goal == 'NW':
+                    trig_zone = 5
+                    goal_read = 'Northwest'
+                    goal_vector_list = [0, 0, 0, 1]
+                # Update action vectors with new reward location
+                for i, act_vec in enumerate(self.action_vector_list[self.action_idx:]):
+                    self.action_vector_read[self.action_idx + i][5] = goal_read
+                    if act_vec[0] == 4:
+                        act_vec[1] = trig_zone
+                        act_vec[23:27] = goal_vector_list
+
+                self.update_vector_lists.emit(self.action_vector_list, self.action_vector_read)
+                total_switches += 1
+                trial_switch_1 = True
+            elif (trial_switch_1 == False and
+                  self.action_vector_list[self.action_idx][0] == 1 and
+                  self.action_vector_read[self.action_idx - 1][9] in ['Fixed No Cue Switch',
+                                                                      'Fixed No Cue Switch Imaging',
+                                                                      'Fixed Cue Switch Imaging',
+                                                                      'Fixed Cue On Switch Imaging'] and
+                  trial_number >= trial_switch_check and
+                  sum(self.score_last_eight) >= 7):
+                if goal_location == 'NE':
+                    new_goal = 'SW'
+                elif goal_location == 'SE':
+                    new_goal = 'NW'
+                elif goal_location == 'SW':
+                    new_goal = 'NE'
+                elif goal_location == 'NW':
+                    new_goal = 'SE'
+                # past_goals.append(new_goal)
+                print('Switch 1')
+                print('Old goal switched to:', new_goal)
+                if new_goal == 'NE':
+                    trig_zone = 21
+                    goal_vector_list = [1, 0, 0, 0]
+                    goal_read = 'Northeast'
+                elif new_goal == 'SE':
+                    trig_zone = 17
+                    goal_vector_list = [0, 1, 0, 0]
+                    goal_read = 'Southeast'
+                elif new_goal == 'SW':
+                    trig_zone = 1
+                    goal_vector_list = [0, 0, 1, 0]
+                    goal_read = 'Southwest'
+                elif new_goal == 'NW':
+                    trig_zone = 5
+                    goal_read = 'Northwest'
+                    goal_vector_list = [0, 0, 0, 1]
+                # Update action vectors with new reward location
+                for i, act_vec in enumerate(self.action_vector_list[self.action_idx:]):
+                    self.action_vector_read[self.action_idx + i][5] = goal_read
+                    if act_vec[0] == 4:
+                        act_vec[1] = trig_zone
+                        act_vec[23:27] = goal_vector_list
+                self.update_vector_lists.emit(self.action_vector_list, self.action_vector_read)
+                total_switches += 1
+                trial_switch_check = trial_number + 16
+                trial_switch_1 = True
+
+            elif (trial_switch_1 == True and trial_switch_2 == False and
+                  self.action_vector_list[self.action_idx][0] == 1 and
+                  self.action_vector_read[self.action_idx - 1][9] in ['Fixed No Cue Switch',
+                                                                      'Fixed No Cue Switch Imaging',
+                                                                      'Fixed Cue Switch Imaging',
+                                                                      'Fixed Cue On Switch Imaging'] and
+                  trial_number >= trial_switch_check and
+                  sum(self.score_last_sixteen) >= 14):
+                print('Switch 2, goal at: ', new_goal)
+                if new_goal == 'NE':
+                    new_goal = 'SW'
+                elif new_goal == 'SE':
+                    new_goal = 'NW'
+                elif new_goal == 'SW':
+                    new_goal = 'NE'
+                elif new_goal == 'NW':
+                    new_goal = 'SE'
+                # past_goals.append(new_goal)
+                print('Old goal switched to:', new_goal)
+                if new_goal == 'NE':
+                    trig_zone = 21
+                    goal_vector_list = [1, 0, 0, 0]
+                    goal_read = 'Northeast'
+                elif new_goal == 'SE':
+                    trig_zone = 17
+                    goal_vector_list = [0, 1, 0, 0]
+                    goal_read = 'Southeast'
+                elif new_goal == 'SW':
+                    trig_zone = 1
+                    goal_vector_list = [0, 0, 1, 0]
+                    goal_read = 'Southwest'
+                elif new_goal == 'NW':
+                    trig_zone = 5
+                    goal_read = 'Northwest'
+                    goal_vector_list = [0, 0, 0, 1]
+                # Update action vectors with new reward location
+                for i, act_vec in enumerate(self.action_vector_list[self.action_idx:]):
+                    self.action_vector_read[self.action_idx + i][5] = goal_read
+                    if act_vec[0] == 4:
+                        act_vec[1] = trig_zone
+                        act_vec[23:27] = goal_vector_list
+                self.update_vector_lists.emit(self.action_vector_list, self.action_vector_read)
+                total_switches += 1
+                trial_switch_2 = True
             elif (trial_switch_1 == False and
                   self.action_vector_list[self.action_idx][0] == 1 and
                   self.action_vector_read[self.action_idx - 1][9] in ['Diff LGT Switch', 'Rotate Reverse',
                                                                       'Rotate Reverse Imaging'] and
                   trial_number >= trial_switch_check):
-                #Insert code to change rotation
+                # Insert code to change rotation
                 trig_zone_ne = 21
                 goal_vector_list_ne = [1, 0, 0, 0]
                 goal_read_ne = 'Northeast'
@@ -449,26 +558,26 @@ class WorkerSessionControlThread(QObject):
                 goal_vector_list_nw = [0, 0, 0, 1]
                 print('Rotate Reverse')
                 for i, act_vec in enumerate(self.action_vector_list[self.action_idx:]):
-                        if self.action_vector_read[self.action_idx + i][5] == 'Northeast':
-                            self.action_vector_read[self.action_idx + i][5] = goal_read_sw
-                            if act_vec[0] == 4:
-                                act_vec[1] = trig_zone_sw
-                                act_vec[23:27] = goal_vector_list_sw
-                        elif self.action_vector_read[self.action_idx + i][5] == 'Southeast':
-                            self.action_vector_read[self.action_idx + i][5] = goal_read_nw
-                            if act_vec[0] == 4:
-                                act_vec[1] = trig_zone_nw
-                                act_vec[23:27] = goal_vector_list_nw
-                        elif self.action_vector_read[self.action_idx + i][5] == 'Southwest':
-                            self.action_vector_read[self.action_idx + i][5] = goal_read_ne
-                            if act_vec[0] == 4:
-                                act_vec[1] = trig_zone_ne
-                                act_vec[23:27] = goal_vector_list_ne
-                        elif self.action_vector_read[self.action_idx + i][5] == 'Northwest':
-                            self.action_vector_read[self.action_idx + i][5] = goal_read_se
-                            if act_vec[0] == 4:
-                                act_vec[1] = trig_zone_se
-                                act_vec[23:27] = goal_vector_list_se
+                    if self.action_vector_read[self.action_idx + i][5] == 'Northeast':
+                        self.action_vector_read[self.action_idx + i][5] = goal_read_sw
+                        if act_vec[0] == 4:
+                            act_vec[1] = trig_zone_sw
+                            act_vec[23:27] = goal_vector_list_sw
+                    elif self.action_vector_read[self.action_idx + i][5] == 'Southeast':
+                        self.action_vector_read[self.action_idx + i][5] = goal_read_nw
+                        if act_vec[0] == 4:
+                            act_vec[1] = trig_zone_nw
+                            act_vec[23:27] = goal_vector_list_nw
+                    elif self.action_vector_read[self.action_idx + i][5] == 'Southwest':
+                        self.action_vector_read[self.action_idx + i][5] = goal_read_ne
+                        if act_vec[0] == 4:
+                            act_vec[1] = trig_zone_ne
+                            act_vec[23:27] = goal_vector_list_ne
+                    elif self.action_vector_read[self.action_idx + i][5] == 'Northwest':
+                        self.action_vector_read[self.action_idx + i][5] = goal_read_se
+                        if act_vec[0] == 4:
+                            act_vec[1] = trig_zone_se
+                            act_vec[23:27] = goal_vector_list_se
 
                 self.update_vector_lists.emit(self.action_vector_list, self.action_vector_read)
 
@@ -481,6 +590,7 @@ class WorkerSessionControlThread(QObject):
             self.start_reward_locations.emit([self.action_vector_read[self.action_idx][4],
                                               self.action_vector_read[self.action_idx][5]])
 
+            # If not testing save data
             if self.thread_testing == False:
                 event_list.append([self.action_idx, self.action_vector_read[self.action_idx][1],
                                    self.event_stream[0], self.event_stream[1], self.event_stream[4],
@@ -491,17 +601,22 @@ class WorkerSessionControlThread(QObject):
                                    self.session_id])
                 self.db_session_event.emit(event_list[-1])
 
-                if self.action_vector_list[self.action_idx][0] in [4,5]:
+                if self.action_vector_list[self.action_idx][0] in [4, 5]:
                     if error_count == 0:
                         trials_perfect += 1
                         self.score_last_eight.pop()
                         self.score_last_eight.insert(0, 1)
+                        self.score_last_sixteen.pop()
+                        self.score_last_sixteen.insert(0, 1)
                     else:
                         self.score_last_eight.pop()
                         self.score_last_eight.insert(0, 0)
+                        self.score_last_sixteen.pop()
+                        self.score_last_sixteen.insert(0, 0)
                     trial_number += 1
                     total_errors += error_count
                     print(self.score_last_eight)
+                    print(self.score_last_sixteen)
                     trial_list.append([trial_number,
                                        self.action_vector_read[self.action_idx][4],
                                        self.action_vector_read[self.action_idx][5],
@@ -517,6 +632,28 @@ class WorkerSessionControlThread(QObject):
                                        ])
                     self.db_trial_update.emit(trial_list[-1])
 
+            # if the action vector that was just executed is trial end AND meet 7/8 criteria, remove all the extra acquisition action vectors
+            # remove 4*extra trial number action vectors, so the very next action vector is the ITI of the first detour session
+            if (trial_detour == False and self.action_vector_list[self.action_idx][0] == 4 and
+                self.action_vector_read[self.action_idx - 1][9] in ['Fixed No Cue Detour Imaging',
+                                                                    'Fixed Cue 2a Imaging',
+                                                                    'Fixed Cue On 2a Imaging'] and
+                trial_number >= trial_detour_check and sum(
+                        self.score_last_eight) >= 7) and self.action_idx < 127:
+                # update action_vector_list
+                del self.action_vector_list[(self.action_idx + 1):128]
+                for i, avl in enumerate(self.action_vector_list):
+                    avl[31] = i
+                # update action_vector_read
+                del self.action_vector_read[(self.action_idx + 1):128]
+                for i, avl in enumerate(self.action_vector_read):
+                    avl[0] = i
+
+                self.update_vector_lists.emit(self.action_vector_list, self.action_vector_read)
+                trial_detour = True
+                print('Detour starts, trial number: ', trial_number)
+                #print(self.score_last_eight)
+
             self.action_idx += 1
             if (
                     ((self.action_idx % 4 == 1) and (time.time() - self.time_start) > self.time_limit) or
@@ -524,12 +661,13 @@ class WorkerSessionControlThread(QObject):
             ):
                 self.thread_open_session = False
 
+        # Catch for Imaging sessions
         if 'Imaging' in self.session_type:
             self.trigger_pause.emit()
             time.sleep(1)
             self.pause_run()
 
-        #Run Finished Save data
+        # Run Finished Save data
         if self.thread_testing == False:
             header_session_event = ['act_idx', 'act_type', 'frame', 'time_stamp', 'zone', 'x_cord', 'y_cord',
                                     'time_dur', 'start_arm', 'goal_loc', 'cue_ort', 'session_id']
@@ -537,7 +675,7 @@ class WorkerSessionControlThread(QObject):
                 writer = csv.writer(f)
                 writer.writerow(header_session_event)
                 writer.writerows(event_list)
-            #print(self.action_vector_read[self.action_idx - 1][9])
+            # print(self.action_vector_read[self.action_idx - 1][9])
             # if (self.action_vector_read[self.action_idx - 1][9] == 'Fixed LGT' or
             #         self.action_vector_read[self.action_idx - 1][9] == 'Rotating LGT 2'):
             header_trial = ['trial_number', 'start_arm', 'goal_location', 'cue_orientation', 'time', 'error_count',
@@ -562,7 +700,8 @@ class WorkerSessionControlThread(QObject):
                                          self.general_info_dump['subject_id']])
 
         time.sleep(5)
-        temp_action_vec = [0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0]
+        temp_action_vec = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                           0]
         self.trigger_action_vector.emit(temp_action_vec)
         self.finished.emit()
         print('Control Session Finished')
@@ -575,12 +714,10 @@ class WorkerSessionControlThread(QObject):
         pass_time_reward_zone = 0.250
         trigger_zone = action_vector[1]
         last_reward_zone = self.action_vector_list[self.action_idx - 1][1]
-        trial_start_arm = self.action_vector_list[self.action_idx-2][1]
+        trial_start_arm = self.action_vector_list[self.action_idx - 2][1]
         turn_1 = ''
         turn_2 = ''
         self.goal_zones_visited.clear()
-        
-        # CODE BLOCK TO MANAGE CUE DELAY PARADIGM
         # Variables to access start goal pair information
         av_idx = self.action_vector_list[self.action_idx][31]
         if av_idx % 4 == 0:
@@ -591,20 +728,26 @@ class WorkerSessionControlThread(QObject):
             sgp_idx = int((av_idx - 2) / 4)
         elif av_idx % 4 == 3:
             sgp_idx = int((av_idx - 3) / 4)
-        #Check if a cue on or cue off trial
+
+        # Check if a cue on or cue off trial
         if (self.session_type == 'Diff LGT Cue Delay' or self.session_type == 'Diff LGT All Cue Delay' or
                 self.session_type == 'Diff LGT Split Cue Delay' or self.session_type == 'Diff LGT Cue Delay 1a' or
                 self.session_type == 'Diff LGT Cue Delay 1b'):
             cue_on = self.start_goal_pairs[sgp_idx][3]
         else:
             cue_on = 1
+
         if ((self.session_type == 'Diff LGT Cue Delay' or self.session_type == 'Diff LGT All Cue Delay' or
-                self.session_type == 'Diff LGT Split Cue Delay' or self.session_type == 'Diff LGT Cue Delay 1a' or
-                self.session_type == 'Diff LGT Cue Delay 1b') and
+             self.session_type == 'Diff LGT Split Cue Delay' or self.session_type == 'Diff LGT Cue Delay 1a' or
+             self.session_type == 'Diff LGT Cue Delay 1b') and
                 action_vector[0] == 2):
             print(self.start_goal_pairs[sgp_idx])
 
-        # CODE BLOCK TO CHECK FOR ZONE STATE AND MANAGE ZONE BASED ACTIONS
+        if trigger_zone == 0:
+            zone_check = False
+        else:
+            zone_check = True
+
         # Zone check loop: When zone is reached the while loop breaks to make
         # maze changes happen.
         # First condition:
@@ -613,14 +756,7 @@ class WorkerSessionControlThread(QObject):
         # Second condition:
         # Checks for zone entrance before moving on the configuration changes
         # Zone check variables:
-        if trigger_zone == 0:
-            zone_check = False
-        else:
-            zone_check = True
-    
         if action_vector[0] == 4:
-            # Trial condition: goal zone reached check, with error counting, and first and second
-            # turn accounting
             print('Trial: Goal Zone Check Loop')
             error_count = 0
             error_zones = [1, 5, 17, 21]
@@ -638,7 +774,7 @@ class WorkerSessionControlThread(QObject):
                 if self.thread_open_session == False:
                     return time.time() - t0_trial_start, error_count, [turn_1, turn_2], cue_on
 
-                # turn choice tracking for first two turns
+                # Check for first and second turn
                 if turn_1_complete == False:
                     if trial_start_arm == 15:
                         if WorkerSessionVideoThread.zone == 12:
@@ -699,7 +835,6 @@ class WorkerSessionControlThread(QObject):
                             turn_2 = 'L'
                             turn_2_complete = True
 
-
                 # Check if in an error_zone for more than set time in seconds if so set in_error_zone = True
                 # So error_count doesn't count multiple times
                 in_error_zone = False
@@ -712,7 +847,7 @@ class WorkerSessionControlThread(QObject):
                     else:
                         time_out_of_error_zone_check = time.time() - time_out_of_error_zone
                     time_in_error_zone = time.time() - tez0
-                    #print(time_in_error_zone, time_out_of_error_zone_check, time_out_of_error_zone, in_error_zone)
+                    # print(time_in_error_zone, time_out_of_error_zone_check, time_out_of_error_zone, in_error_zone)
                     if ((time_in_error_zone >= pass_time_in_error_zone) and
                             (in_error_zone == False) and
                             (time_out_of_error_zone_check >= pass_time_out_of_error_zone)):
@@ -720,7 +855,7 @@ class WorkerSessionControlThread(QObject):
                         self.goal_zones_visited.append(WorkerSessionVideoThread.zone)
                         time_out_of_error_zone = time.time()
                         in_error_zone = True
-                        #print(time_in_error_zone)
+                        # print(time_in_error_zone)
                     self.pause_run()
                     if self.thread_open_session == False:
                         return time.time() - t0_trial_start, error_count, [turn_1, turn_2], cue_on
@@ -828,57 +963,56 @@ class WorkerSessionControlThread(QObject):
             else:
                 next_start_arm = 0
 
-            #next_start_arm = self.action_vector_list[self.action_idx + 1][1]
-            #time.sleep(2)
-            # print(f'Last: {last_reward_zone}/nstart: {next_start_arm}')
-            # Close ITI conditions
+            # Temporary action vector copy to use in conditions bellow
+            # THIS LITTLE CATCH WITH THE NAME CHANGES SHOULD DO THE TRICK TO KEEP CUE ON IN ITI
+            if "Cue On" in self.session_type:
+                # Get the last cue configuration and pass it to temp_action_vec so the cue stays on during the ITI
+                temp_action_vec = action_vector.copy()
+                temp_action_vec[19:23] = self.action_vector_list[self.action_idx - 1][19:23]
+                print(f'Caught Cue On Condition: \nbefore: {temp_action_vec[19:23]}\nafter: {temp_action_vec[19:23]}')
+            else:
+                temp_action_vec = action_vector.copy()
+            # Proximal start ITI conditions
             if last_reward_zone == 5 and (next_start_arm == 12 or next_start_arm == 7):
-                #print('checking zone close (rwz 5)')
+                # print('checking zone close (rwz 5)')
                 if next_start_arm == 12:
-                    temp_action_vec = action_vector.copy()
                     temp_action_vec[3:19] = [0, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1]
                     self.trigger_action_vector.emit(temp_action_vec)
                 if next_start_arm == 7:
-                    temp_action_vec = action_vector.copy()
                     temp_action_vec[3:19] = [0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0]
                     self.trigger_action_vector.emit(temp_action_vec)
 
             elif last_reward_zone == 21 and (next_start_arm == 15 or next_start_arm == 12):
-                #print('checking zone close (rwz 21)')
+                # print('checking zone close (rwz 21)')
                 if next_start_arm == 15:
-                    temp_action_vec = action_vector.copy()
                     temp_action_vec[3:19] = [1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0]
                     self.trigger_action_vector.emit(temp_action_vec)
                 if next_start_arm == 12:
-                    temp_action_vec = action_vector.copy()
                     temp_action_vec[3:19] = [1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1]
                     self.trigger_action_vector.emit(temp_action_vec)
 
             elif last_reward_zone == 17 and (next_start_arm == 10 or next_start_arm == 15):
-                #print('checking zone close (rwz 17)')
+                # print('checking zone close (rwz 17)')
                 if next_start_arm == 10:
-                    temp_action_vec = action_vector.copy()
                     temp_action_vec[3:19] = [0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1]
                     self.trigger_action_vector.emit(temp_action_vec)
                 if next_start_arm == 15:
-                    temp_action_vec = action_vector.copy()
                     temp_action_vec[3:19] = [0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0]
                     self.trigger_action_vector.emit(temp_action_vec)
 
             elif last_reward_zone == 1 and (next_start_arm == 7 or next_start_arm == 10):
-                #print('checking zone close (rwz 1)')
+                # print('checking zone close (rwz 1)')
                 if next_start_arm == 7:
-                    temp_action_vec = action_vector.copy()
                     temp_action_vec[3:19] = [0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0]
                     self.trigger_action_vector.emit(temp_action_vec)
                 if next_start_arm == 10:
-                    temp_action_vec = action_vector.copy()
                     temp_action_vec[3:19] = [0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1]
                     self.trigger_action_vector.emit(temp_action_vec)
-            # Far ITI conditions
+
+            # Distal start arm ITI conditions
             elif last_reward_zone == 5 and (next_start_arm == 10 or next_start_arm == 15):
-                #print('checking zone far (rwz 5)')
-                self.trigger_action_vector.emit(action_vector)
+                # print('checking zone far (rwz 5)')
+                self.trigger_action_vector.emit(temp_action_vec)
                 if next_start_arm == 10:
                     trigger_sub_zone = [2, 18]
                     while True:
@@ -911,8 +1045,8 @@ class WorkerSessionControlThread(QObject):
                         time.sleep(0.05)
 
             elif last_reward_zone == 21 and (next_start_arm == 7 or next_start_arm == 10):
-                #print('checking zone far (rwz 21)')
-                self.trigger_action_vector.emit(action_vector)
+                # print('checking zone far (rwz 21)')
+                self.trigger_action_vector.emit(temp_action_vec)
                 if next_start_arm == 7:
                     trigger_sub_zone = [6, 8]
                     while True:
@@ -947,8 +1081,8 @@ class WorkerSessionControlThread(QObject):
                         time.sleep(0.05)
 
             elif last_reward_zone == 17 and (next_start_arm == 7 or next_start_arm == 12):
-                #print('checking zone far (rwz 17)')
-                self.trigger_action_vector.emit(action_vector)
+                # print('checking zone far (rwz 17)')
+                self.trigger_action_vector.emit(temp_action_vec)
                 if next_start_arm == 7:
                     trigger_sub_zone = [6, 8]
                     while True:
@@ -983,8 +1117,8 @@ class WorkerSessionControlThread(QObject):
                         time.sleep(0.05)
 
             elif last_reward_zone == 1 and (next_start_arm == 12 or next_start_arm == 15):
-                #print('checking zone far (rwz 1)')
-                self.trigger_action_vector.emit(action_vector)
+                # print('checking zone far (rwz 1)')
+                self.trigger_action_vector.emit(temp_action_vec)
                 if next_start_arm == 12:
                     trigger_sub_zone = [4, 20]
                     while True:
@@ -1019,7 +1153,9 @@ class WorkerSessionControlThread(QObject):
                         time.sleep(0.05)
         # Case: Pretrial for dark test
         elif action_vector[0] == 2 and self.session_type in ['Fixed No Cue', 'Dark Train', 'Dark Detour No Cue',
-                                                             'Dark Reverse', 'Fixed No Cue Imaging']:
+                                                             'Fixed No Cue Detour Imaging', 'Fixed No Cue Detour',
+                                                             'Dark Reverse', 'Fixed No Cue Imaging',
+                                                             'Fixed No Cue Twist', 'Fixed No Cue Switch Imaging']:
             temp_action_vec = action_vector.copy()
             temp_action_vec[19:23] = [0, 0, 0, 0]
             self.trigger_action_vector.emit(temp_action_vec)
@@ -1054,24 +1190,26 @@ class WorkerSessionControlThread(QObject):
             # turn cue off in trialstart if cue off trial or if it is testing rats in dark with monitor
             # backlight on to match cue off conditions.
             if cue_on == 0 or self.session_type in ['Fixed No Cue', 'Dark Train', 'Dark Detour No Cue', 'Dark Reverse',
-                                                    'Fixed No Cue Imaging']:
+                                                    'Fixed No Cue Detour Imaging', 'Fixed No Cue Detour',
+                                                    'Fixed No Cue Imaging', 'Fixed No Cue Twist',
+                                                    'Fixed No Cue Switch Imaging']:
                 temp_action_vec[19:23] = [0, 0, 0, 0]
             self.trigger_action_vector.emit(temp_action_vec)
         # Check that turns cue off durring working memory version of behavior
         elif ((self.session_type == 'Diff LGT Cue Delay' or self.session_type == 'Diff LGT All Cue Delay' or
-                self.session_type == 'Diff LGT Split Cue Delay' or self.session_type == 'Diff LGT Cue Delay 1a' or
+               self.session_type == 'Diff LGT Split Cue Delay' or self.session_type == 'Diff LGT Cue Delay 1a' or
                self.session_type == 'Diff LGT Cue Delay 1b') and action_vector[0] == 4 and cue_on == 0):
             temp_action_vec = action_vector.copy()
             temp_action_vec[19:23] = [0, 0, 0, 0]
             self.trigger_action_vector.emit(temp_action_vec)
-        # Keep monitors of in Dark Test
+        # Keep monitors off in Dark Test
         elif (self.session_type in ['Fixed No Cue', 'Dark Train', 'Dark Detour No Cue', 'Dark Reverse',
-                                    'Fixed No Cue Imaging'] and
+                                    'Fixed No Cue Detour Imaging', 'Fixed No Cue Detour',
+                                    'Fixed No Cue Imaging', 'Fixed No Cue Twist', 'Fixed No Cue Switch Imaging'] and
               action_vector[0] == 4):
             temp_action_vec = action_vector.copy()
             temp_action_vec[19:23] = [0, 0, 0, 0]
             self.trigger_action_vector.emit(temp_action_vec)
-        # Just do what it says to do
         elif self.session_type == 'Exposure' and action_vector[0] == 5:
             print(f'Reward given at zone {self.reward_zone}')
             if self.reward_zone == 21:
@@ -1083,13 +1221,13 @@ class WorkerSessionControlThread(QObject):
             elif self.reward_zone == 5:
                 reward_list = [0, 0, 0, 1]
             else:
-                reward_list = [0,0,0,0]
+                reward_list = [0, 0, 0, 0]
             temp_action_vec = action_vector.copy()
             temp_action_vec[23:27] = reward_list
             self.trigger_action_vector.emit(temp_action_vec)
+        # Just do what action_vector says to do
         else:
             self.trigger_action_vector.emit(action_vector)
-
 
         # pause and check before next action vector can be processed
         if action_vector[2] != 0:
@@ -1106,7 +1244,6 @@ class WorkerSessionControlThread(QObject):
                     self.thread_open_session = False
                 td_pause = time.time() - t0_pause
                 time.sleep(0.010)
-
         if action_vector[0] == 4:
             return (time.time() - t0_trial_start) - td_pause, error_count, [turn_1, turn_2], cue_on
         else:
@@ -1143,15 +1280,16 @@ class WorkerSessionVideoThread(QObject):
         self.iso = iso
         self.varThreshold = varThreshold
         self.resolution = (480, 480)
-        self.date_time = str(datetime.datetime.now()).replace(' ', '_').replace(':', '_').\
+        self.date_time = str(datetime.datetime.now()).replace(' ', '_').replace(':', '_'). \
             replace('.', '_').replace('-', '_')
         self.time_stamp_backup = 0
         self.step_backup = 0
+        self.path_to_dir = path_to_dir
 
         if not thread_testing:
             self.path_to_video = (
-                        path_to_dir + '/' + sgi['subject_name'] + '_' + 'vid' + '_' + str(sgi['session_number']) + '_' +
-                        sgi['date'].replace('/', '') + '_' + sgi['time'].replace(':', '') + '.avi')
+                    path_to_dir + '/' + sgi['subject_name'] + '_' + 'vid' + '_' + str(sgi['session_number']) + '_' +
+                    sgi['date'].replace('/', '') + '_' + sgi['time'].replace(':', '') + '.avi')
             self.path_to_data = (path_to_dir + '/' + sgi['subject_name'] + '_' + 'cord_data' + '_' + str(
                 sgi['session_number']) + '_' +
                                  sgi['date'].replace('/', '') + '_' + sgi['time'].replace(':', '') + '.csv')
@@ -1229,7 +1367,6 @@ class WorkerSessionVideoThread(QObject):
             image_frame = cv2.rotate(image_frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
             out_file.write(image_frame)
 
-
         out_file.release()
         # Save coordinate data to csv file
         header = ['step', 'time_stamp', 'cord_x', 'cord_y', 'zone']
@@ -1245,6 +1382,10 @@ class WorkerSessionVideoThread(QObject):
         print(msg)
         client_sub.close()
         client_req.close()
+        # download the Unix timestamp (in seconds) of the video start time
+        cmd = f"scp raspberrypi-d@{self.HOST}:/home/raspberrypi-d/ntp_start_time.csv '{self.path_to_dir}'/"
+        subprocess.call(cmd, shell=True)
+        print('ntp_start_time.csv downloaded to ' + self.path_to_dir + '/')
         self.finished.emit()
 
 
@@ -1265,17 +1406,15 @@ class WorkerVideoThread(QObject):
         self.iso = iso
         self.varThreshold = varThreshold
         self.resolution = (480, 480)
-        self.date_time = str(datetime.datetime.now()).replace(' ', '_').replace(':', '_').\
+        self.date_time = str(datetime.datetime.now()).replace(' ', '_').replace(':', '_'). \
             replace('.', '_').replace('-', '_')
         self.thread_open_video = True
-
-
 
     # Streams video only without running a behavior session
     def run(self):
         zone = 0
         image_frame = np.ndarray((480, 480, 3), dtype=np.uint8)
-        prv_image_frame = np.ndarray((480,480, 3), dtype=np.uint8)
+        prv_image_frame = np.ndarray((480, 480, 3), dtype=np.uint8)
         zmq_context = zmq.Context.instance()  # Using the context available from the MazeControl class
         client_req = zmq_context.socket(zmq.REQ)
         client_req.connect(f'tcp://{self.HOST}:{self.PORT_REQ}')
@@ -1323,6 +1462,10 @@ class WorkerVideoThread(QObject):
         self.update_button.emit()
         self.finished.emit()
         print('Socket Client Disconnected')
+
+        cmd = f"scp raspberrypi-d@{self.HOST}:/home/raspberrypi-d/ntp_start_time.csv ~/Downloads/"
+        subprocess.call(cmd, shell=True)
+        print('ntp_start_time.csv downloaded to ~/Downloads/')
 
 
 class TableStaticModel(QAbstractTableModel):
@@ -1423,7 +1566,7 @@ class SubjectsModel:
         table_model.setTable('subjects')
         table_model.setEditStrategy(QSqlTableModel.OnFieldChange)
         table_model.select()
-        subjects_model_header = ('ID', 'name', 'sex', 'current behavior', 'last\nsess', 'conf', 'typ', 'active','',
+        subjects_model_header = ('ID', 'name', 'sex', 'current behavior', 'last\nsess', 'conf', 'typ', 'active', '',
                                  'rew vol')
         for column_idx, header in enumerate(subjects_model_header):
             table_model.setHeaderData(column_idx, Qt.Horizontal, header)
@@ -1500,7 +1643,8 @@ class AddSubjectDialog(QDialog):
         combo_box_cue_reward_orientation.setLineEdit(self.cue_goal_field)
 
         # retained cue defined by amount of separation between cue/goal indexes
-        self.list_session_type_cue = ['Exposure', 'LGTOM', 'Fixed LGT', 'Rotating LGT 2', 'Rotating LGT 4', 'RDT Task', 'None']
+        self.list_session_type_cue = ['Exposure', 'LGTOM', 'Fixed LGT', 'Rotating LGT 2', 'Rotating LGT 4', 'RDT Task',
+                                      'None']
         combo_box_session_type = QComboBox()
         combo_box_session_type.addItems(self.list_session_type_cue)
         self.session_type_field = QLineEdit()
@@ -1590,10 +1734,10 @@ class AddSubjectDialog(QDialog):
             return
 
         if (self.session_type_field.text() == self.list_session_type_cue[0] or
-            self.session_type_field.text() == self.list_session_type_cue[1] or
-            self.session_type_field.text() == self.list_session_type_cue[2] or
-            self.session_type_field.text() == self.list_session_type_cue[3] or
-            self.session_type_field.text() == self.list_session_type_cue[4]):
+                self.session_type_field.text() == self.list_session_type_cue[1] or
+                self.session_type_field.text() == self.list_session_type_cue[2] or
+                self.session_type_field.text() == self.list_session_type_cue[3] or
+                self.session_type_field.text() == self.list_session_type_cue[4]):
 
             self.data.append(self.session_type_field.text())
         else:
@@ -1620,7 +1764,7 @@ class AddSubjectDialog(QDialog):
             )
             self.data = None
             return
-        #Set delay to 0
+        # Set delay to 0
         self.data.append('0')
 
         if not self.data:
@@ -1815,83 +1959,139 @@ class MainWindow(QMainWindow):
         # 3-18: Barrier state 0 for down and 1 for up 3 is B1 and 4 is B2 ....
         # 19-22: Cue config index key [20:N, 21:E, 22:S, 23:W]
         # 23-26: reward config, index key [0:NE, 1:SE, 2:SW, 3:NW]
-        # 27-30: light-config, index [0:UV1, 1:UV2, 2:UV3, 3:UV4]
+        # 27-30: light-config, index [0:UV1, 1:UV2, 2:UV3, 3:UV4] THIS IS NO LONGER USED (Was a cue for start arm).
         # 31: index in action vector list
         # LMGT: Landmark guided task
         # 0: presesion start arm
-        presession_n_vec_LMGT = [0,0,0, 0,0,0,1,0,1,0,0,0,0,0,0,0,1,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        presession_e_vec_LMGT = [0,0,0, 1,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        presession_s_vec_LMGT = [0,0,0, 0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        presession_w_vec_LMGT = [0,0,0, 0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        presession_n_vec_LMGT = [0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        presession_e_vec_LMGT = [0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        presession_s_vec_LMGT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        presession_w_vec_LMGT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
         # 1 ITI start arm
-        iti_n_vec_LMGT = [1,0,0, 0,1,0,0,0,0,0,1,0,0,1,0,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        iti_e_vec_LMGT = [1,0,0, 0,0,0,0,1,0,0,1,0,0,1,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        iti_s_vec_LMGT = [1,0,0, 0,1,0,0,1,0,0,1,0,0,0,0,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        iti_w_vec_LMGT = [1,0,0, 0,1,0,0,1,0,0,0,0,0,1,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        iti_n_vec_LMGT = [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          -1]
+        iti_e_vec_LMGT = [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          -1]
+        iti_s_vec_LMGT = [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          -1]
+        iti_w_vec_LMGT = [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          -1]
         # 2: pretrial action vectors start arm and cue orientations
         # north start arm (Note changing delay time 0 from 1)
-        pretrial_n_n_vec_LMGT = [2,12,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_n_e_vec_LMGT = [2,12,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_n_s_vec_LMGT = [2,12,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_n_w_vec_LMGT = [2,12,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_n_n_vec_LMGT = [2, 12, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_n_e_vec_LMGT = [2, 12, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_n_s_vec_LMGT = [2, 12, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_n_w_vec_LMGT = [2, 12, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
         # east start arm
-        pretrial_e_n_vec_LMGT = [2,15,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_e_e_vec_LMGT = [2,15,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_e_s_vec_LMGT = [2,15,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_e_w_vec_LMGT = [2,15,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_e_n_vec_LMGT = [2, 15, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_e_e_vec_LMGT = [2, 15, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_e_s_vec_LMGT = [2, 15, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_e_w_vec_LMGT = [2, 15, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
         # south start arm
-        pretrial_s_n_vec_LMGT = [2,10,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_s_e_vec_LMGT = [2,10,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_s_s_vec_LMGT = [2,10,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_s_w_vec_LMGT = [2,10,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_s_n_vec_LMGT = [2, 10, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_s_e_vec_LMGT = [2, 10, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_s_s_vec_LMGT = [2, 10, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_s_w_vec_LMGT = [2, 10, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
         # west start arm
-        pretrial_w_n_vec_LMGT = [2,7,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_w_e_vec_LMGT = [2,7,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_w_s_vec_LMGT = [2,7,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_w_w_vec_LMGT = [2,7,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_w_n_vec_LMGT = [2, 7, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        pretrial_w_e_vec_LMGT = [2, 7, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        pretrial_w_s_vec_LMGT = [2, 7, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        pretrial_w_w_vec_LMGT = [2, 7, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
 
         # 3:trial start action vectors startarm and cue orientations
         # north start arm
-        trialstart_n_n_vec_LMGT = [3,13,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_n_e_vec_LMGT = [3,13,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_n_s_vec_LMGT = [3,13,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_n_w_vec_LMGT = [3,13,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_n_n_vec_LMGT = [3, 13, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_n_e_vec_LMGT = [3, 13, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_n_s_vec_LMGT = [3, 13, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_n_w_vec_LMGT = [3, 13, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # east start arm
-        trialstart_e_n_vec_LMGT = [3,19,0, 1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_e_e_vec_LMGT = [3,19,0, 1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_e_s_vec_LMGT = [3,19,0, 1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_e_w_vec_LMGT = [3,19,0, 1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_e_n_vec_LMGT = [3, 19, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_e_e_vec_LMGT = [3, 19, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_e_s_vec_LMGT = [3, 19, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_e_w_vec_LMGT = [3, 19, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # south start arm
-        trialstart_s_n_vec_LMGT = [3,9,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_s_e_vec_LMGT = [3,9,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_s_s_vec_LMGT = [3,9,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_s_w_vec_LMGT = [3,9,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_s_n_vec_LMGT = [3, 9, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_s_e_vec_LMGT = [3, 9, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_s_s_vec_LMGT = [3, 9, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_s_w_vec_LMGT = [3, 9, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # west start arm
-        trialstart_w_n_vec_LMGT = [3,3,0, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_w_e_vec_LMGT = [3,3,0, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_w_s_vec_LMGT = [3,3,0, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_w_w_vec_LMGT = [3,3,0, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_w_n_vec_LMGT = [3, 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_w_e_vec_LMGT = [3, 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_w_s_vec_LMGT = [3, 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_w_w_vec_LMGT = [3, 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # 4 trial end (reward): action vectors reward and cue orientation
         # northeast goal
-        trialend_ne_n_vec_LGMT = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 1,0,0,0, 0,0,0,0, -1]
-        trialend_ne_e_vec_LGMT = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 1,0,0,0, 0,0,0,0, -1]
-        trialend_ne_s_vec_LGMT = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0, -1]
-        trialend_ne_w_vec_LGMT = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,0, -1]
+        trialend_ne_n_vec_LGMT = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_ne_e_vec_LGMT = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_ne_s_vec_LGMT = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_ne_w_vec_LGMT = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0,
+                                  0, 0, 0, -1]
         # southeast goal
-        trialend_se_n_vec_LGMT = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,1,0,0, 0,0,0,0, -1]
-        trialend_se_e_vec_LGMT = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,1,0,0, 0,0,0,0, -1]
-        trialend_se_s_vec_LGMT = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,0,0, -1]
-        trialend_se_w_vec_LGMT = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,0, -1]
+        trialend_se_n_vec_LGMT = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_se_e_vec_LGMT = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_se_s_vec_LGMT = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_se_w_vec_LGMT = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0,
+                                  0, 0, 0, -1]
         # southwest goal
-        trialend_sw_n_vec_LGMT = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,0, -1]
-        trialend_sw_e_vec_LGMT = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,0, -1]
-        trialend_sw_s_vec_LGMT = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0, -1]
-        trialend_sw_w_vec_LGMT = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,0,1,0, 0,0,0,0, -1]
+        trialend_sw_n_vec_LGMT = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, -1]
+        trialend_sw_e_vec_LGMT = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, -1]
+        trialend_sw_s_vec_LGMT = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, -1]
+        trialend_sw_w_vec_LGMT = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0,
+                                  0, 0, -1]
         # northwest goal
-        trialend_nw_n_vec_LGMT = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,0,0,1, 0,0,0,0, -1]
-        trialend_nw_e_vec_LGMT = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,0,0,1, 0,0,0,0, -1]
-        trialend_nw_s_vec_LGMT = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,0,0,1, 0,0,0,0, -1]
-        trialend_nw_w_vec_LGMT = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,0,0,1, 0,0,0,0, -1]
+        trialend_nw_n_vec_LGMT = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+                                  0, 0, -1]
+        trialend_nw_e_vec_LGMT = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0,
+                                  0, 0, -1]
+        trialend_nw_s_vec_LGMT = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0,
+                                  0, 0, -1]
+        trialend_nw_w_vec_LGMT = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0,
+                                  0, 0, -1]
 
         # action states matrix LGMT
         # matrix of predefined action vectors
@@ -1918,81 +2118,137 @@ class MainWindow(QMainWindow):
         # Landmark Guided Task Open Maze LMGTOM: Start is the entire middle of the maze.
         # Same comments on indexing as for LMGT just different configurations for each part of the session
         # 0 PRESESSION
-        presession_n_vec_LMGTOM = [0,0,0, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        presession_e_vec_LMGTOM = [0,0,0, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        presession_s_vec_LMGTOM = [0,0,0, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        presession_w_vec_LMGTOM = [0,0,0, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        presession_n_vec_LMGTOM = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        presession_e_vec_LMGTOM = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        presession_s_vec_LMGTOM = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        presession_w_vec_LMGTOM = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
 
         # 1 ITI
-        iti_n_vec_LMGTOM = [1,0,0, 0,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,0, 0,0,0,0, 0,1,0,0, -1]
-        iti_e_vec_LMGTOM = [1,0,0, 0,0,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,0,0, -1]
-        iti_s_vec_LMGTOM = [1,0,0, 0,1,0,0,1,0,0,1,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1, -1]
-        iti_w_vec_LMGTOM = [1,0,0, 0,1,0,0,1,0,0,0,0,0,1,0,0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0, -1]
+        iti_n_vec_LMGTOM = [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+                            -1]
+        iti_e_vec_LMGTOM = [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                            -1]
+        iti_s_vec_LMGTOM = [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+                            -1]
+        iti_w_vec_LMGTOM = [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+                            -1]
 
         # 2 PRETRIAL
         # entering north start arm
-        pretrial_n_n_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_n_e_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_n_s_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_n_w_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_n_n_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_n_e_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_n_s_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_n_w_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # entering east start arm
-        pretrial_e_n_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_e_e_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_e_s_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_e_w_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_e_n_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_e_e_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_e_s_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_e_w_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # entering south start arm
-        pretrial_s_n_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_s_e_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_s_s_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_s_w_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_s_n_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_s_e_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_s_s_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_s_w_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # entering west start arm
-        pretrial_w_n_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_w_e_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_w_s_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_w_w_vec_LMGTOM = [2,11,10, 0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_w_n_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_w_e_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_w_s_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        pretrial_w_w_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
 
         # 3 TRIAL START
-        trialstart_n_n_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_n_e_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_n_s_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_n_w_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_n_n_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_n_e_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_n_s_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_n_w_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
 
-        trialstart_e_n_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_e_e_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_e_s_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_e_w_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_e_n_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_e_e_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_e_s_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_e_w_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
 
-        trialstart_s_n_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_s_e_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_s_s_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_s_w_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_s_n_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_s_e_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_s_s_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_s_w_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
 
-        trialstart_w_n_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_w_e_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_w_s_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_w_w_vec_LMGTOM = [3,11,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_w_n_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_w_e_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_w_s_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
+        trialstart_w_w_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                                     0, 0, 0, 0, -1]
 
         # 4 TRIAL END
         # northeast goal
-        trialend_ne_n_vec_LMGTOM = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 1,0,0,0, 0,0,0,0, -1]
-        trialend_ne_e_vec_LMGTOM = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 1,0,0,0, 0,0,0,0, -1]
-        trialend_ne_s_vec_LMGTOM = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0, -1]
-        trialend_ne_w_vec_LMGTOM = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,0, -1]
+        trialend_ne_n_vec_LMGTOM = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0,
+                                    0, 0, 0, -1]
+        trialend_ne_e_vec_LMGTOM = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0,
+                                    0, 0, 0, -1]
+        trialend_ne_s_vec_LMGTOM = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0,
+                                    0, 0, 0, -1]
+        trialend_ne_w_vec_LMGTOM = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0,
+                                    0, 0, 0, -1]
         # southeast goal
-        trialend_se_n_vec_LMGTOM = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,1,0,0, 0,0,0,0, -1]
-        trialend_se_e_vec_LMGTOM = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,1,0,0, 0,0,0,0, -1]
-        trialend_se_s_vec_LMGTOM = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,0,0, -1]
-        trialend_se_w_vec_LMGTOM = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,0, -1]
+        trialend_se_n_vec_LMGTOM = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0,
+                                    0, 0, 0, -1]
+        trialend_se_e_vec_LMGTOM = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0,
+                                    0, 0, 0, -1]
+        trialend_se_s_vec_LMGTOM = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0,
+                                    0, 0, 0, -1]
+        trialend_se_w_vec_LMGTOM = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0,
+                                    0, 0, 0, -1]
         # southwest goal
-        trialend_sw_n_vec_LMGTOM = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,0, -1]
-        trialend_sw_e_vec_LMGTOM = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,0, -1]
-        trialend_sw_s_vec_LMGTOM = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0, -1]
-        trialend_sw_w_vec_LMGTOM = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,0,1,0, 0,0,0,0, -1]
+        trialend_sw_n_vec_LMGTOM = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0,
+                                    0, 0, 0, -1]
+        trialend_sw_e_vec_LMGTOM = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0,
+                                    0, 0, 0, -1]
+        trialend_sw_s_vec_LMGTOM = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0,
+                                    0, 0, 0, -1]
+        trialend_sw_w_vec_LMGTOM = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0,
+                                    0, 0, 0, -1]
         # northwest goal
-        trialend_nw_n_vec_LMGTOM = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,0,0,0, 0,0,0,1, 0,0,0,0, -1]
-        trialend_nw_e_vec_LMGTOM = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,1,0,0, 0,0,0,1, 0,0,0,0, -1]
-        trialend_nw_s_vec_LMGTOM = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,1,0, 0,0,0,1, 0,0,0,0, -1]
-        trialend_nw_w_vec_LMGTOM = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,1, 0,0,0,1, 0,0,0,0, -1]
+        trialend_nw_n_vec_LMGTOM = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0,
+                                    0, 0, 0, -1]
+        trialend_nw_e_vec_LMGTOM = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0,
+                                    0, 0, 0, -1]
+        trialend_nw_s_vec_LMGTOM = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+                                    0, 0, 0, -1]
+        trialend_nw_w_vec_LMGTOM = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                                    0, 0, 0, -1]
 
         self.action_states_matrix_LMGTOM = [
             [presession_n_vec_LMGTOM, presession_e_vec_LMGTOM, presession_s_vec_LMGTOM, presession_w_vec_LMGTOM],
@@ -2002,10 +2258,14 @@ class MainWindow(QMainWindow):
              [pretrial_s_n_vec_LMGTOM, pretrial_s_e_vec_LMGTOM, pretrial_s_s_vec_LMGTOM, pretrial_s_w_vec_LMGTOM],
              [pretrial_w_n_vec_LMGTOM, pretrial_w_e_vec_LMGTOM, pretrial_w_s_vec_LMGTOM, pretrial_w_w_vec_LMGTOM]
              ],
-            [[trialstart_n_n_vec_LMGTOM, trialstart_n_e_vec_LMGTOM, trialstart_n_s_vec_LMGTOM, trialstart_n_w_vec_LMGTOM],
-             [trialstart_e_n_vec_LMGTOM, trialstart_e_e_vec_LMGTOM, trialstart_e_s_vec_LMGTOM, trialstart_e_w_vec_LMGTOM],
-             [trialstart_s_n_vec_LMGTOM, trialstart_s_e_vec_LMGTOM, trialstart_s_s_vec_LMGTOM, trialstart_s_w_vec_LMGTOM],
-             [trialstart_w_n_vec_LMGTOM, trialstart_w_e_vec_LMGTOM, trialstart_w_s_vec_LMGTOM, trialstart_w_w_vec_LMGTOM]
+            [[trialstart_n_n_vec_LMGTOM, trialstart_n_e_vec_LMGTOM, trialstart_n_s_vec_LMGTOM,
+              trialstart_n_w_vec_LMGTOM],
+             [trialstart_e_n_vec_LMGTOM, trialstart_e_e_vec_LMGTOM, trialstart_e_s_vec_LMGTOM,
+              trialstart_e_w_vec_LMGTOM],
+             [trialstart_s_n_vec_LMGTOM, trialstart_s_e_vec_LMGTOM, trialstart_s_s_vec_LMGTOM,
+              trialstart_s_w_vec_LMGTOM],
+             [trialstart_w_n_vec_LMGTOM, trialstart_w_e_vec_LMGTOM, trialstart_w_s_vec_LMGTOM,
+              trialstart_w_w_vec_LMGTOM]
              ],
             [[trialend_ne_n_vec_LMGTOM, trialend_ne_e_vec_LMGTOM, trialend_ne_s_vec_LMGTOM, trialend_ne_w_vec_LMGTOM],
              [trialend_se_n_vec_LMGTOM, trialend_se_e_vec_LMGTOM, trialend_se_s_vec_LMGTOM, trialend_se_w_vec_LMGTOM],
@@ -2014,7 +2274,7 @@ class MainWindow(QMainWindow):
              ]
         ]
 
-        #PATH INTEGRATION GUIDED TASK
+        # PATH INTEGRATION GUIDED TASK
         # index value pairing for PIGT is as follows
         # 0: Action-type (0: Presession, 1: ITI, 2: Pretrial, 3: Trial start,
         #   4: trial end)
@@ -2030,79 +2290,135 @@ class MainWindow(QMainWindow):
         # 32: index in action vector list
         # PIGT: Landmark guided task
         # 0: presesion start arm
-        presession_n_vec_PIGT = [0,0,0, 0,0,0,1,0,1,0,0,0,0,0,0,0,1,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        presession_e_vec_PIGT = [0,0,0, 1,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        presession_s_vec_PIGT = [0,0,0, 0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        presession_w_vec_PIGT = [0,0,0, 0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        presession_n_vec_PIGT = [0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        presession_e_vec_PIGT = [0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        presession_s_vec_PIGT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        presession_w_vec_PIGT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
         # 1 ITI start arm
-        iti_n_vec_PIGT = [1,0,0, 0,1,0,0,0,0,0,1,0,0,1,0,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        iti_e_vec_PIGT = [1,0,0, 0,0,0,0,1,0,0,1,0,0,1,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        iti_s_vec_PIGT = [1,0,0, 0,1,0,0,1,0,0,1,0,0,0,0,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        iti_w_vec_PIGT = [1,0,0, 0,1,0,0,1,0,0,0,0,0,1,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        iti_n_vec_PIGT = [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          -1]
+        iti_e_vec_PIGT = [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          -1]
+        iti_s_vec_PIGT = [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          -1]
+        iti_w_vec_PIGT = [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          -1]
         # 2: pretrial action vectors start arm and cue orientations
         # north start arm
-        pretrial_n_n_vec_PIGT = [2,12,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_n_e_vec_PIGT = [2,12,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_n_s_vec_PIGT = [2,12,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_n_w_vec_PIGT = [2,12,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_n_n_vec_PIGT = [2, 12, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_n_e_vec_PIGT = [2, 12, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_n_s_vec_PIGT = [2, 12, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_n_w_vec_PIGT = [2, 12, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
         # east start arm
-        pretrial_e_n_vec_PIGT = [2,15,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_e_e_vec_PIGT = [2,15,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_e_s_vec_PIGT = [2,15,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_e_w_vec_PIGT = [2,15,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_e_n_vec_PIGT = [2, 15, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_e_e_vec_PIGT = [2, 15, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_e_s_vec_PIGT = [2, 15, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_e_w_vec_PIGT = [2, 15, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
         # south start arm
-        pretrial_s_n_vec_PIGT = [2,10,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_s_e_vec_PIGT = [2,10,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_s_s_vec_PIGT = [2,10,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_s_w_vec_PIGT = [2,10,10, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_s_n_vec_PIGT = [2, 10, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_s_e_vec_PIGT = [2, 10, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_s_s_vec_PIGT = [2, 10, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
+        pretrial_s_w_vec_PIGT = [2, 10, 10, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, -1]
         # west start arm
-        pretrial_w_n_vec_PIGT = [2,7,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_w_e_vec_PIGT = [2,7,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_w_s_vec_PIGT = [2,7,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        pretrial_w_w_vec_PIGT = [2,7,10, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        pretrial_w_n_vec_PIGT = [2, 7, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        pretrial_w_e_vec_PIGT = [2, 7, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        pretrial_w_s_vec_PIGT = [2, 7, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
+        pretrial_w_w_vec_PIGT = [2, 7, 10, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, -1]
 
         # 3:trial start action vectors startarm and cue orientations
         # north start arm
-        trialstart_n_n_vec_PIGT = [3,13,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_n_e_vec_PIGT = [3,13,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_n_s_vec_PIGT = [3,13,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_n_w_vec_PIGT = [3,13,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_n_n_vec_PIGT = [3, 13, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_n_e_vec_PIGT = [3, 13, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_n_s_vec_PIGT = [3, 13, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_n_w_vec_PIGT = [3, 13, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # east start arm
-        trialstart_e_n_vec_PIGT = [3,19,0, 1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_e_e_vec_PIGT = [3,19,0, 1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_e_s_vec_PIGT = [3,19,0, 1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_e_w_vec_PIGT = [3,19,0, 1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_e_n_vec_PIGT = [3, 19, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_e_e_vec_PIGT = [3, 19, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_e_s_vec_PIGT = [3, 19, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_e_w_vec_PIGT = [3, 19, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # south start arm
-        trialstart_s_n_vec_PIGT = [3,9,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_s_e_vec_PIGT = [3,9,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_s_s_vec_PIGT = [3,9,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_s_w_vec_PIGT = [3,9,0, 0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_s_n_vec_PIGT = [3, 9, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_s_e_vec_PIGT = [3, 9, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_s_s_vec_PIGT = [3, 9, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_s_w_vec_PIGT = [3, 9, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # west start arm
-        trialstart_w_n_vec_PIGT = [3,3,0, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_w_e_vec_PIGT = [3,3,0, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_w_s_vec_PIGT = [3,3,0, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
-        trialstart_w_w_vec_PIGT = [3,3,0, 1,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, -1]
+        trialstart_w_n_vec_PIGT = [3, 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_w_e_vec_PIGT = [3, 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_w_s_vec_PIGT = [3, 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
+        trialstart_w_w_vec_PIGT = [3, 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                   0, 0, 0, -1]
         # 4 trial end (reward): action vectors reward and cue orientation
         # northeast goal
-        trialend_ne_n_vec_PIGT = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, -1]
-        trialend_ne_e_vec_PIGT = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, -1]
-        trialend_ne_s_vec_PIGT = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, -1]
-        trialend_ne_w_vec_PIGT = [4,21,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, -1]
+        trialend_ne_n_vec_PIGT = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_ne_e_vec_PIGT = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_ne_s_vec_PIGT = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_ne_w_vec_PIGT = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                                  0, 0, 0, -1]
         # southeast goal
-        trialend_se_n_vec_PIGT = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, -1]
-        trialend_se_e_vec_PIGT = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, -1]
-        trialend_se_s_vec_PIGT = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, -1]
-        trialend_se_w_vec_PIGT = [4,17,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, -1]
+        trialend_se_n_vec_PIGT = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_se_e_vec_PIGT = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_se_s_vec_PIGT = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, 0, -1]
+        trialend_se_w_vec_PIGT = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, 0, -1]
         # southwest goal
-        trialend_sw_n_vec_PIGT = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, -1]
-        trialend_sw_e_vec_PIGT = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, -1]
-        trialend_sw_s_vec_PIGT = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, -1]
-        trialend_sw_w_vec_PIGT = [4,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, -1]
+        trialend_sw_n_vec_PIGT = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, -1]
+        trialend_sw_e_vec_PIGT = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, -1]
+        trialend_sw_s_vec_PIGT = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, -1]
+        trialend_sw_w_vec_PIGT = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                  0, 0, -1]
         # northwest goal
-        trialend_nw_n_vec_PIGT = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0, -1]
-        trialend_nw_e_vec_PIGT = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0, -1]
-        trialend_nw_s_vec_PIGT = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0, -1]
-        trialend_nw_w_vec_PIGT = [4,5,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0, -1]
+        trialend_nw_n_vec_PIGT = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+                                  0, 0, -1]
+        trialend_nw_e_vec_PIGT = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+                                  0, 0, -1]
+        trialend_nw_s_vec_PIGT = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+                                  0, 0, -1]
+        trialend_nw_w_vec_PIGT = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+                                  0, 0, -1]
 
         # action states matrix PIGT
         # matrix of predefined action vectors
@@ -2295,7 +2611,7 @@ class MainWindow(QMainWindow):
         self.button_dim_lights_OFF = QPushButton('DIM OFF')
         self.button_dim_lights_OFF.clicked.connect(self.control_room_lights_dim_off)
         self.button_dim_lights_OFF.setEnabled(False)
-        #IR Lights
+        # IR Lights
         label_IR_lights = QLabel()
         label_IR_lights.setText('IR Lights')
         self.line_edit_IR_lights = QLineEdit()
@@ -2519,7 +2835,7 @@ class MainWindow(QMainWindow):
     def all_barriers(self, direction):
         dur = 0
         idx = [i for i in range(16)]
-        #random.shuffle(idx)
+        # random.shuffle(idx)
         if direction == 'up':
             for i in idx:
                 if self.state_barrier_list[i] == 0:
@@ -2748,7 +3064,7 @@ class MainWindow(QMainWindow):
         data_session_grid.addWidget(H_line_light, 3, 0, 1, 100)
         # Row 15
         data_session_grid.addWidget(self.button_pause_session, 15, 0, 1, 15)
-        #data_session_grid.addWidget
+        # data_session_grid.addWidget
         data_session_grid.addWidget(self.button_open_stream_session, 15, 70, 1, 15)
         data_session_grid.addWidget(self.button_close_stream_session, 15, 85, 1, 15)
         # Row 16
@@ -2970,7 +3286,7 @@ class MainWindow(QMainWindow):
         self.init_session_data()
 
     def set_session_data(self):
-        #data hold subject data
+        # data hold subject data
         data = []
         idx = self.subjects_table.selectionModel().currentIndex()
         if idx.sibling(idx.row(), idx.column()).data() == None:
@@ -2999,7 +3315,7 @@ class MainWindow(QMainWindow):
         self.label_seed_data.setText(self.add_seed(sess_num, current_date))
         self.label_session_type_data.setText(data[6])
 
-        reward_value = {'50','100','150','200','250','300'}
+        reward_value = {'50', '100', '150', '200', '250', '300'}
         if data[7] in reward_value:
             self.line_edit_reward_volume.setText(data[7])
         else:
@@ -3023,6 +3339,7 @@ class MainWindow(QMainWindow):
             # vec_str = vec_str[:8] + '  |  ' + vec_str[10:56] +'  |  ' + vec_str[58:68] + '  |  ' + vec_str[70:80] + '  |  ' + vec_str[82:92] + '  |  ' + vec_str[94:97]
             self.label_action_vector_contents.setText(f'Act Vec: {vec_str}')
 
+    # This code generates the core of what type of trials are by defining the start and goal
     def generate_start_goal_pairs(self, _seed, pair_type=None, cue_goal_index=None, goal_location=None):
         # function for running all cue presentations
         def generate_sg_pairs_1(sg_idx_):
@@ -3513,7 +3830,6 @@ class MainWindow(QMainWindow):
         def generate_sg_differentiate_1(list_size, ort):
             # Third index is tell if reward is to the right or to the left.
             print(ort)
-            # Determine the orientation and create the initial sg_pairs_list based on the orientation
             if ort == 'N/NE' or ort == 'N/SW':
                 print('NE or SW')
                 sg_pairs_list = [(i, (i + 1) % 4, 0) for i in range(4)] + [(i, (i - 1) % 4, 1) for i in range(4)]
@@ -3522,21 +3838,22 @@ class MainWindow(QMainWindow):
                 sg_pairs_list = [(i, i, 0) for i in range(4)] + [(i, (i + 2) % 4, 1) for i in range(4)]
 
             sg_pairs = []
-            # Shuffle and copy sg_pairs_list to sg_pairs list_size times
             for _ in range(list_size):
                 random.shuffle(sg_pairs_list)
                 sg_pairs += sg_pairs_list.copy()
 
             passed = False
             check = 0
-            # Ensure no four consecutive elements in sg_pairs have the same first or third element
             while not passed:
                 passed = True
                 for i, sgp in enumerate(sg_pairs[0:-3]):
-                    if ((sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0] and sgp[0] == sg_pairs[i + 3][0]) or
-                        (sgp[2] == 1 and sg_pairs[i + 1][2] == 1 and sg_pairs[i + 2][2] == 1 and sg_pairs[i + 3][2] == 1) or
-                        (sgp[2] == 0 and sg_pairs[i + 1][2] == 0 and sg_pairs[i + 2][2] == 0 and sg_pairs[i + 3][2] == 0)):  
-                        # If a sequence of four is found, swap the current element with a random element
+                    if ((sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0] and sgp[0] == sg_pairs[i + 3][
+                        0]) or
+                            (sgp[2] == 1 and sg_pairs[i + 1][2] == 1 and sg_pairs[i + 2][2] == 1 and sg_pairs[i + 3][
+                                2] == 1) or
+                            (sgp[2] == 0 and sg_pairs[i + 1][2] == 0 and sg_pairs[i + 2][2] == 0 and sg_pairs[i + 3][
+                                2] == 0)
+                    ):
                         if i < 2:
                             rand_idx = random.randint(i + 4, list_size * 8 - 1)
                         elif i < list_size * 8 - 4:
@@ -3548,6 +3865,48 @@ class MainWindow(QMainWindow):
 
                         passed = False
                 check += 1
+            # print(check)
+            return sg_pairs
+
+        def generate_sg_differentiate_1_twist(list_size, ort):
+            # Third index is tell if reward is to the right or to the left.
+            print(ort)
+            if ort == 'N/NE' or ort == 'N/SW':
+                print('NE or SW')
+                sg_pairs_list = [((i + 1) % 4, i, 0) for i in range(4)] + [((i + 2) % 4, i, 1) for i in range(4)]
+            else:
+                print('SE or NW')
+                sg_pairs_list = [((i - 1) % 4, i, 1) for i in range(4)] + [(i, i, 0) for i in range(4)]
+
+            sg_pairs = []
+            for _ in range(list_size):
+                random.shuffle(sg_pairs_list)
+                sg_pairs += sg_pairs_list.copy()
+
+            passed = False
+            check = 0
+            while not passed:
+                passed = True
+                for i, sgp in enumerate(sg_pairs[0:-3]):
+                    if ((sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0] and sgp[0] == sg_pairs[i + 3][
+                        0]) or
+                            (sgp[2] == 1 and sg_pairs[i + 1][2] == 1 and sg_pairs[i + 2][2] == 1 and sg_pairs[i + 3][
+                                2] == 1) or
+                            (sgp[2] == 0 and sg_pairs[i + 1][2] == 0 and sg_pairs[i + 2][2] == 0 and sg_pairs[i + 3][
+                                2] == 0)
+                    ):
+                        if i < 2:
+                            rand_idx = random.randint(i + 4, list_size * 8 - 1)
+                        elif i < list_size * 8 - 4:
+                            rand_idx_list = [random.randint(0, i - 1), random.randint(i + 4, list_size * 8 - 1)]
+                            rand_idx = random.choice(rand_idx_list)
+                        else:
+                            rand_idx = random.randint(0, i - 1)
+                        sg_pairs[i], sg_pairs[rand_idx] = sg_pairs[rand_idx], sg_pairs[i]
+
+                        passed = False
+                check += 1
+            # print(check)
             return sg_pairs
 
         def generate_sg_differentiate_2a(list_size, ort):
@@ -3612,7 +3971,6 @@ class MainWindow(QMainWindow):
                     if sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0]:
                         start_threepeat += 1
                         start_repeat_loc.append(i)
-                
                 # Catch four repeats or over threepeat limit
                 if (route_fourpeat > 0 or goal_fourpeat > 0 or start_fourpeat > 0 or
                         route_threepeat > route_repeat_limit or
@@ -3723,7 +4081,8 @@ class MainWindow(QMainWindow):
                     fails += 1
                     passed = False
                     continue
-            
+            # return sg_pairs, fails, [(start_threepeat, start_repeat_loc), (goal_threepeat, goal_repeat_loc),
+            #                          (route_threepeat, route_repeat_loc)]
             return sg_pairs
 
         def generate_sg_differentiate_2b(list_size, ort):
@@ -3925,7 +4284,6 @@ class MainWindow(QMainWindow):
             elif ort == 'N/SW':
                 # Third index:  RR= 0, LL = 1, LR =2
                 sg_pairs_list_trained = [(i, (j + i + 3) % 4, j) for i in range(4) for j in range(3)]
-
 
             if ort == 'N/NW':
                 # Third index: 0 = RL, 1 = LL, 2 = LR, 3 = RR
@@ -5782,7 +6140,7 @@ class MainWindow(QMainWindow):
             return sg_pairs_list
 
         def generate_sg_fixed_cue_1(list_size, ort):
-            index_size = list_size*8
+            index_size = list_size * 8
             print(index_size)
             # NE:0, SE:1, SW:2, NW:3
             goal_loc = random.randint(0, 3)
@@ -5849,6 +6207,75 @@ class MainWindow(QMainWindow):
             print('Repeat loc: ', start_repeat_loc)
             return sg_pairs
 
+        def generate_sg_fixed_cue_1_twist(list_size, ort):
+            index_size = list_size * 8
+            print(index_size)
+            # NE:0, SE:1, SW:2, NW:3
+            goal_loc = random.randint(0, 3)
+            # LL:0, RR:1, RL:2, LR:3
+            # (start_arm, goal_loc, route_type)
+            if ort == 'N/NE':
+                sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 2) % 4, goal_loc, 2)]
+            elif ort == 'N/SE':
+                sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 2) % 4, goal_loc, 2)]
+            elif ort == 'N/SW':
+                sg_pairs_list = [((goal_loc - 1) % 4, goal_loc, 3), (goal_loc, goal_loc, 0)]
+            elif ort == 'N/NW':
+                sg_pairs_list = [((goal_loc - 1) % 4, goal_loc, 3), (goal_loc, goal_loc, 0)]
+            sg_pairs_temp = sg_pairs_list * 4
+
+            start_repeat_limit = 2
+            start_threepeat = 0
+            start_fourpeat = 0
+            start_repeat_loc = []
+            sg_pairs = []
+            passed = False
+            fails = 0
+            while not passed:
+                passed = True
+                sg_pairs.clear()
+                for _ in range(list_size):
+                    random.shuffle(sg_pairs_temp)
+                    sg_pairs += sg_pairs_temp.copy()
+                for i, sgp in enumerate(sg_pairs[0:-3]):
+                    if sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0] and sgp[0] == sg_pairs[i + 3][0]:
+                        start_fourpeat += 1
+                    if sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0]:
+                        start_threepeat += 1
+                        start_repeat_loc.append(i)
+                    if i == index_size - 4 and sg_pairs[i + 1][0] == sg_pairs[i + 2][0] and sg_pairs[i + 1][0] == \
+                            sg_pairs[i + 3][0]:
+                        start_threepeat += 1
+                        start_repeat_loc.append(i)
+                # Catch four repeats or over threepeat limit
+                if (start_fourpeat > 0 or start_threepeat > start_repeat_limit):
+                    start_threepeat = 0
+                    start_fourpeat = 0
+                    start_repeat_loc = []
+                    fails += 1
+                    passed = False
+                    continue
+
+                # Catch route threepeats that are too close together for first occurance
+                if (len(start_repeat_loc) == 3 and ((start_repeat_loc[1] - start_repeat_loc[0]) < 16) or
+                        (len(start_repeat_loc) == 2 and ((start_repeat_loc[1] - start_repeat_loc[0]) < 16))):
+                    start_threepeat = 0
+                    start_fourpeat = 0
+                    start_repeat_loc = []
+                    fails += 1
+                    passed = False
+                    continue
+                if len(start_repeat_loc) == 3 and (start_repeat_loc[2] - start_repeat_loc[1] < 16):
+                    start_threepeat = 0
+                    start_fourpeat = 0
+                    start_repeat_loc = []
+                    fails += 1
+                    passed = False
+                    continue
+            print('fails: ', fails)
+            print('Repeat loc: ', start_repeat_loc)
+            return sg_pairs
+
         def generate_sg_fixed_cue_2a(list_size, ort):
             index_size = 16 + (list_size - 1) * 6
             # print(index_size)
@@ -5856,6 +6283,7 @@ class MainWindow(QMainWindow):
             goal_loc = random.randint(0, 3)
 
             # LL:0, RR:1, RL:2, LR:3
+            # Acquistion trials
             if ort == 'N/NE':
                 sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc - 1) % 4, goal_loc, 3)]
             elif ort == 'N/SE':
@@ -5864,10 +6292,11 @@ class MainWindow(QMainWindow):
                 sg_pairs_list = [((goal_loc - 1) % 4, goal_loc, 3), ((goal_loc + 1) % 4, goal_loc, 1)]
             elif ort == 'N/NW':
                 sg_pairs_list = [((goal_loc + 2) % 4, goal_loc, 2), (goal_loc, goal_loc, 0)]
-            sg_pairs_trained = sg_pairs_list * 8 # 16 trained trials to start
+            sg_pairs_trained = sg_pairs_list * 8  # 16 trained trials to start
             sg_pairs_list = []
 
             # LL:0, RR:1, RL:2, LR:3
+            # Detour/Novel-route trials
             if ort == 'N/NE':
                 sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc - 1) % 4, goal_loc, 3),
                                  ((goal_loc - 2) % 4, goal_loc, 2), ((goal_loc - 2) % 4, goal_loc, 2),
@@ -5920,7 +6349,8 @@ class MainWindow(QMainWindow):
                     if sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0]:
                         start_threepeat += 1
                         start_repeat_loc.append(i)
-                    if i == index_size - 4 and sg_pairs[i + 1][0] == sg_pairs[i + 2][0] and sg_pairs[i + 1][0] == sg_pairs[i + 3][0]:
+                    if i == index_size - 4 and sg_pairs[i + 1][0] == sg_pairs[i + 2][0] and sg_pairs[i + 1][0] == \
+                            sg_pairs[i + 3][0]:
                         start_threepeat += 1
                         start_repeat_loc.append(i)
                 # Catch four repeats or over threepeat limit
@@ -5932,6 +6362,187 @@ class MainWindow(QMainWindow):
                     passed = False
                     continue
 
+            print('fails: ', fails)
+            print('threepeat: ', start_threepeat)
+            print('threepeat loc: ', start_repeat_loc)
+            return sg_pairs
+
+        def generate_sg_detour_32PLUS24(list_size, ort):
+            index_size = 32 + (list_size - 1) * 6
+            # print(index_size)
+            # NE:0, SE:1, SW:2, NW:3
+            goal_loc = random.randint(0, 3)
+
+            # LL:0, RR:1, RL:2, LR:3
+            # Acquisition trials
+            if ort == 'N/NE':
+                sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc - 1) % 4, goal_loc, 3)]
+            elif ort == 'N/SE':
+                sg_pairs_list = [(goal_loc, goal_loc, 0), ((goal_loc + 2) % 4, goal_loc, 2)]
+            elif ort == 'N/SW':
+                sg_pairs_list = [((goal_loc - 1) % 4, goal_loc, 3), ((goal_loc + 1) % 4, goal_loc, 1)]
+            elif ort == 'N/NW':
+                sg_pairs_list = [((goal_loc + 2) % 4, goal_loc, 2), (goal_loc, goal_loc, 0)]
+            sg_pairs_trained = sg_pairs_list * 16  # 32 trained trials to start
+            sg_pairs_list = []
+
+            # LL:0, RR:1, RL:2, LR:3
+            # Detour/Novel-route trials
+            if ort == 'N/NE':
+                sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc - 1) % 4, goal_loc, 3),
+                                 ((goal_loc - 2) % 4, goal_loc, 2), ((goal_loc - 2) % 4, goal_loc, 2),
+                                 ((goal_loc - 2) % 4, goal_loc, 2), ((goal_loc - 2) % 4, goal_loc, 2)]
+            elif ort == 'N/SE':
+                sg_pairs_list = [(goal_loc, goal_loc, 0), ((goal_loc + 2) % 4, goal_loc, 2),
+                                 ((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 1) % 4, goal_loc, 1),
+                                 ((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 1) % 4, goal_loc, 1)]
+            elif ort == 'N/SW':
+                sg_pairs_list = [((goal_loc - 1) % 4, goal_loc, 3), ((goal_loc + 1) % 4, goal_loc, 1),
+                                 (goal_loc, goal_loc, 0), (goal_loc, goal_loc, 0),
+                                 (goal_loc, goal_loc, 0), (goal_loc, goal_loc, 0)]
+            elif ort == 'N/NW':
+                sg_pairs_list = [((goal_loc + 2) % 4, goal_loc, 2), (goal_loc, goal_loc, 0),
+                                 ((goal_loc - 1) % 4, goal_loc, 3), ((goal_loc - 1) % 4, goal_loc, 3),
+                                 ((goal_loc - 1) % 4, goal_loc, 3), ((goal_loc - 1) % 4, goal_loc, 3)]
+            sg_pairs_test = sg_pairs_list
+
+            start_threepeat_limit = 0
+            start_threepeat = 0
+            start_fourpeat = 0
+            start_repeat_loc = []
+            sg_pairs = []
+            temp_item = sg_pairs_test[-1]
+            passed = False
+            fails = 0
+            while not passed:
+                passed = True
+                sg_pairs.clear()
+                for i in range(list_size):
+                    if i < 1:
+                        random.shuffle(sg_pairs_trained)
+                        sg_pairs += sg_pairs_trained.copy()
+                    elif i == 1:
+                        sg_pairs_test.remove(temp_item)
+                        random.shuffle(sg_pairs_test)
+                        sg_pairs += [temp_item] + sg_pairs_test.copy()
+                        sg_pairs_test.append(temp_item)
+                    else:
+                        random.shuffle(sg_pairs_test)
+                        if sg_pairs[-6:] == sg_pairs_test:
+                            passed = False
+                            continue
+                        else:
+                            sg_pairs += sg_pairs_test.copy()
+
+                for i, sgp in enumerate(sg_pairs[0:-3]):
+                    if sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0] and sgp[0] == sg_pairs[i + 3][0]:
+                        start_fourpeat += 1
+                    if sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0]:
+                        start_threepeat += 1
+                        start_repeat_loc.append(i)
+                    if i == index_size - 4 and sg_pairs[i + 1][0] == sg_pairs[i + 2][0] and sg_pairs[i + 1][0] == \
+                            sg_pairs[i + 3][0]:
+                        start_threepeat += 1
+                        start_repeat_loc.append(i)
+                # Catch four repeats or over threepeat limit
+                if (start_fourpeat > 0 or start_threepeat > start_threepeat_limit):
+                    start_threepeat = 0
+                    start_fourpeat = 0
+                    start_repeat_loc = []
+                    fails += 1
+                    passed = False
+                    continue
+
+            print('fails: ', fails)
+            print('threepeat: ', start_threepeat)
+            print('threepeat loc: ', start_repeat_loc)
+            return sg_pairs
+
+        def generate_sg_fixed_cue_2a_twist(list_size, ort):
+            index_size = 16 + (list_size - 1) * 6
+            # print(index_size)
+            # NE:0, SE:1, SW:2, NW:3
+            goal_loc = random.randint(0, 3)
+
+            # LL:0, RR:1, RL:2, LR:3
+            if ort == 'N/NE':
+                sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 2) % 4, goal_loc, 2)]
+            elif ort == 'N/SE':
+                sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 2) % 4, goal_loc, 2)]
+            elif ort == 'N/SW':
+                sg_pairs_list = [((goal_loc - 1) % 4, goal_loc, 3), (goal_loc, goal_loc, 0)]
+            elif ort == 'N/NW':
+                sg_pairs_list = [((goal_loc - 1) % 4, goal_loc, 3), (goal_loc, goal_loc, 0)]
+            sg_pairs_trained = sg_pairs_list * 8  # 16 trained trials to start
+
+            sg_pairs_list = []
+            # LL:0, RR:1, RL:2, LR:3
+            if ort == 'N/NE':
+                sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 2) % 4, goal_loc, 2),
+                                 ((goal_loc - 1) % 4, goal_loc, 3), ((goal_loc - 1) % 4, goal_loc, 3),
+                                 ((goal_loc - 1) % 4, goal_loc, 3), ((goal_loc - 1) % 4, goal_loc, 3)]
+            elif ort == 'N/SE':
+                sg_pairs_list = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 2) % 4, goal_loc, 2),
+                                 (goal_loc, goal_loc, 0), (goal_loc, goal_loc, 0),
+                                 (goal_loc, goal_loc, 0), (goal_loc, goal_loc, 0)]
+            elif ort == 'N/SW':
+                sg_pairs_list = [((goal_loc - 1) % 4, goal_loc, 3), (goal_loc, goal_loc, 0),
+                                 ((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 1) % 4, goal_loc, 1),
+                                 ((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc + 1) % 4, goal_loc, 1)]
+            elif ort == 'N/NW':
+                sg_pairs_list = [((goal_loc - 1) % 4, goal_loc, 3), (goal_loc, goal_loc, 0),
+                                 ((goal_loc - 2) % 4, goal_loc, 2), ((goal_loc - 2) % 4, goal_loc, 2),
+                                 ((goal_loc - 2) % 4, goal_loc, 2), ((goal_loc - 2) % 4, goal_loc, 2)]
+            sg_pairs_test = sg_pairs_list
+
+            start_threepeat_limit = 0
+            start_threepeat = 0
+            start_fourpeat = 0
+            start_repeat_loc = []
+            sg_pairs = []
+            temp_item = sg_pairs_test[-1]
+            passed = False
+            fails = 0
+
+            while not passed:
+                print('looping')
+                passed = True
+                sg_pairs.clear()
+                for i in range(list_size):
+                    if i < 1:
+                        random.shuffle(sg_pairs_trained)
+                        sg_pairs += sg_pairs_trained.copy()
+                    elif i == 1:
+                        sg_pairs_test.remove(temp_item)
+                        random.shuffle(sg_pairs_test)
+                        sg_pairs += [temp_item] + sg_pairs_test.copy()
+                        sg_pairs_test.append(temp_item)
+                    else:
+                        random.shuffle(sg_pairs_test)
+                        if sg_pairs[-6:] == sg_pairs_test:
+                            passed = False
+                            continue
+                        else:
+                            sg_pairs += sg_pairs_test.copy()
+
+                for i, sgp in enumerate(sg_pairs[0:-3]):
+                    if sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0] and sgp[0] == sg_pairs[i + 3][0]:
+                        start_fourpeat += 1
+                    if sgp[0] == sg_pairs[i + 1][0] and sgp[0] == sg_pairs[i + 2][0]:
+                        start_threepeat += 1
+                        start_repeat_loc.append(i)
+                    if i == index_size - 4 and sg_pairs[i + 1][0] == sg_pairs[i + 2][0] and sg_pairs[i + 1][0] == \
+                            sg_pairs[i + 3][0]:
+                        start_threepeat += 1
+                        start_repeat_loc.append(i)
+                # Catch four repeats or over threepeat limit
+                if (start_fourpeat > 0 or start_threepeat > start_threepeat_limit):
+                    start_threepeat = 0
+                    start_fourpeat = 0
+                    start_repeat_loc = []
+                    fails += 1
+                    passed = False
+                    continue
 
             print('fails: ', fails)
             print('threepeat: ', start_threepeat)
@@ -6076,7 +6687,7 @@ class MainWindow(QMainWindow):
                 sg_pairs_temp = [((goal_loc - 1) % 4, goal_loc, 3), ((goal_loc + 1) % 4, goal_loc, 1)]
             elif ort == 'N/NW':
                 sg_pairs_temp = [((goal_loc + 2) % 4, goal_loc, 2), (goal_loc, goal_loc, 0)]
-            sg_pairs_warmup = sg_pairs_temp*4
+            sg_pairs_warmup = sg_pairs_temp * 4
             if ort == 'N/NE':
                 sg_pairs_detour = [((goal_loc + 1) % 4, goal_loc, 1), ((goal_loc - 1) % 4, goal_loc, 3),
                                    (goal_loc, goal_loc, 0), (goal_loc, goal_loc, 0),
@@ -6150,31 +6761,31 @@ class MainWindow(QMainWindow):
 
         def generate_sg_rotate_detour_1a(list_size, ort):
             if ort == 'N/NE' or ort == 'N/SW':
-                #print('N/NE')
+                # print('N/NE')
                 sg_pairs_list_warmup = [(i, (i + 1) % 4, 0) for i in range(4)] + [(i, (i - 1) % 4, 2) for i in range(4)]
             else:
-                #print('SE or NW')
+                # print('SE or NW')
                 sg_pairs_list_warmup = [(i, i, 0) for i in range(4)] + [(i, (i + 2) % 4, 2) for i in range(4)]
 
             if ort == 'N/NW':
                 # Third index: LL = 0, LR = 1, RL =2
                 sg_pairs_list_test_detour = [(i, (j + i) % 4, j) for i in range(4) for j in [1]]
-                sg_pairs_list_test_train = [(i, (j + i) % 4, j) for i in range(4) for j in [0,2]]
+                sg_pairs_list_test_train = [(i, (j + i) % 4, j) for i in range(4) for j in [0, 2]]
                 random.shuffle(sg_pairs_list_test_train)
             elif ort == 'N/NE':
                 # Third index:  LR= 0, RL = 1, RR =2
                 sg_pairs_list_test_detour = [(i, (j + i + 1) % 4, j) for i in range(4) for j in [1]]
-                sg_pairs_list_test_train = [(i, (j + i + 1) % 4, j) for i in range(4) for j in [0,2]]
+                sg_pairs_list_test_train = [(i, (j + i + 1) % 4, j) for i in range(4) for j in [0, 2]]
                 random.shuffle(sg_pairs_list_test_train)
             elif ort == 'N/SE':
                 # Third index:  RL= 0, RR = 1, LL =2
                 sg_pairs_list_test_detour = [(i, (j + i + 2) % 4, j) for i in range(4) for j in [1]]
-                sg_pairs_list_test_train = [(i, (j + i + 2) % 4, j) for i in range(4) for j in [0,2]]
+                sg_pairs_list_test_train = [(i, (j + i + 2) % 4, j) for i in range(4) for j in [0, 2]]
                 random.shuffle(sg_pairs_list_test_train)
             elif ort == 'N/SW':
                 # Third index:  RR= 0, LL = 1, LR =2
                 sg_pairs_list_test_detour = [(i, (j + i + 3) % 4, j) for i in range(4) for j in [1]]
-                sg_pairs_list_test_train = [(i, (j + i + 3) % 4, j) for i in range(4) for j in [0,2]]
+                sg_pairs_list_test_train = [(i, (j + i + 3) % 4, j) for i in range(4) for j in [0, 2]]
                 random.shuffle(sg_pairs_list_test_train)
 
             start_repeat_limit = 3
@@ -6271,7 +6882,7 @@ class MainWindow(QMainWindow):
                     passed = False
                     continue
 
-                # Catch goal threepeats that are too close together for first occurance
+                # Catch route threepeats that are too close together for first occurance
                 if (len(goal_repeat_loc) == 3 and (goal_repeat_loc[1] - goal_repeat_loc[0] < 16) or
                         (len(goal_repeat_loc) == 2 and goal_repeat_loc[1] - goal_repeat_loc[0] < 16)):
                     sg_pairs = []
@@ -6302,7 +6913,7 @@ class MainWindow(QMainWindow):
                     passed = False
                     continue
 
-                # Catch start threepeats that are too close together for first occurance
+                # Catch route threepeats that are too close together for first occurance
                 if (len(start_repeat_loc) == 3 and (start_repeat_loc[1] - start_repeat_loc[0] < 16) or
                         (len(start_repeat_loc) == 2 and start_repeat_loc[1] - start_repeat_loc[0] < 16)):
                     sg_pairs = []
@@ -6338,37 +6949,37 @@ class MainWindow(QMainWindow):
 
         def generate_sg_rotate_detour_1b(list_size, ort):
             if ort == 'N/NE' or ort == 'N/SW':
-                #print('N/NE')
+                # print('N/NE')
                 sg_pairs_list_warmup = [(i, (i + 1) % 4, 0) for i in range(4)] + [(i, (i - 1) % 4, 2) for i in range(4)]
             else:
-                #print('SE or NW')
+                # print('SE or NW')
                 sg_pairs_list_warmup = [(i, i, 0) for i in range(4)] + [(i, (i + 2) % 4, 2) for i in range(4)]
 
             if ort == 'N/NW':
                 # Third index: LL = 0, LR = 1, RL =2
                 sg_pairs_list_test_detour = [(i, (j + i) % 4, j) for i in range(4) for j in [1]]
-                sg_pairs_list_test_train_a = [(i, (j + i) % 4, j) for i in range(4) for j in [0,2]]
+                sg_pairs_list_test_train_a = [(i, (j + i) % 4, j) for i in range(4) for j in [0, 2]]
                 sg_pairs_list_test_train_b = [(i, (j + i) % 4, j) for i in range(4) for j in [0, 2]]
                 random.shuffle(sg_pairs_list_test_train_a)
                 random.shuffle(sg_pairs_list_test_train_b)
             elif ort == 'N/NE':
                 # Third index:  LR= 0, RL = 1, RR =2
                 sg_pairs_list_test_detour = [(i, (j + i + 1) % 4, j) for i in range(4) for j in [1]]
-                sg_pairs_list_test_train_a = [(i%4, (j + i + 1) % 4, j%4) for i in range(8) for j in [2]]
-                sg_pairs_list_test_train_b = [(i%4, (j + i + 1) % 4, j%4) for i in range(8) for j in [2]]
+                sg_pairs_list_test_train_a = [(i % 4, (j + i + 1) % 4, j % 4) for i in range(8) for j in [2]]
+                sg_pairs_list_test_train_b = [(i % 4, (j + i + 1) % 4, j % 4) for i in range(8) for j in [2]]
                 random.shuffle(sg_pairs_list_test_train_a)
                 random.shuffle(sg_pairs_list_test_train_b)
             elif ort == 'N/SE':
                 # Third index:  RL= 0, RR = 1, LL =2
                 sg_pairs_list_test_detour = [(i, (j + i + 2) % 4, j) for i in range(4) for j in [1]]
-                sg_pairs_list_test_train_a = [(i, (j + i + 2) % 4, j) for i in range(4) for j in [0,2]]
+                sg_pairs_list_test_train_a = [(i, (j + i + 2) % 4, j) for i in range(4) for j in [0, 2]]
                 sg_pairs_list_test_train_b = [(i, (j + i + 2) % 4, j) for i in range(4) for j in [0, 2]]
                 random.shuffle(sg_pairs_list_test_train_a)
                 random.shuffle(sg_pairs_list_test_train_b)
             elif ort == 'N/SW':
                 # Third index:  RR= 0, LL = 1, LR =2
                 sg_pairs_list_test_detour = [(i, (j + i + 3) % 4, j) for i in range(4) for j in [1]]
-                sg_pairs_list_test_train_a = [(i, (j + i + 3) % 4, j) for i in range(4) for j in [0,2]]
+                sg_pairs_list_test_train_a = [(i, (j + i + 3) % 4, j) for i in range(4) for j in [0, 2]]
                 sg_pairs_list_test_train_b = [(i, (j + i + 3) % 4, j) for i in range(4) for j in [0, 2]]
                 random.shuffle(sg_pairs_list_test_train_a)
                 random.shuffle(sg_pairs_list_test_train_b)
@@ -6572,25 +7183,36 @@ class MainWindow(QMainWindow):
             sg_pairs = generate_sg_differentiate_cue_delay_1a(6, cue_goal_index)
         elif pair_type == 'Diff LGT Cue Delay 1b':
             sg_pairs = generate_sg_differentiate_cue_delay_1b(4, cue_goal_index)
-        elif pair_type in ['Fixed Cue 1', 'Fixed Cue 1 Imaging']:
+        elif pair_type in ['Fixed Cue 1', 'Fixed Cue 1 Imaging',
+                           'Fixed Cue On 1 Imaging']:  # Add new detour name here for beggining of detour trials
             sg_pairs = generate_sg_fixed_cue_1(4, cue_goal_index)
+        elif pair_type in ['Fixed Cue 1 Twist', 'Fixed No Cue Twist']:
+            sg_pairs = generate_sg_fixed_cue_1_twist(4, cue_goal_index)
+        elif pair_type in ['Fixed Cue Novel Route Twist']:
+            sg_pairs = generate_sg_fixed_cue_2a_twist(5, cue_goal_index)
         elif pair_type == 'Fixed Cue 2b':
             sg_pairs = generate_sg_fixed_cue_2b(4, cue_goal_index)
+        elif pair_type in ['Fixed Cue 2a']:  # These are novel foute/detour sessions
+            sg_pairs = generate_sg_fixed_cue_2a(5, cue_goal_index)
         elif pair_type == 'Fixed Cue 3':
             sg_pairs = generate_sg_fixed_cue_3(3, cue_goal_index)
         elif pair_type in ['Fixed Cue 3a', 'Fixed Cue 3a Imaging']:
             sg_pairs = generate_sg_fixed_cue_3a(6, cue_goal_index)
-        elif pair_type in ['Fixed Cue Switch', 'Fixed Cue Switch Imaging']:
+        elif pair_type in ['Fixed Cue Switch', 'Fixed Cue Switch Imaging', 'Fixed Cue On Switch Imaging']:
             sg_pairs = generate_sg_fixed_cue_1(10, cue_goal_index)
-        elif pair_type in ['Fixed No Cue', 'Fixed No Cue Imaging']:
+        elif pair_type in ['Fixed Cue Switch Twist']:
+            sg_pairs = generate_sg_fixed_cue_1_twist(10, cue_goal_index)
+        elif pair_type in ['Dark Train', 'Fixed No Cue', 'Fixed No Cue Imaging']:
             sg_pairs = generate_sg_fixed_cue_1(4, cue_goal_index)
         elif pair_type in ['Fixed Cue Rotate', 'Fixed Cue Rotate Imaging']:
             sg_pairs = generate_sg_differentiate_1(2, cue_goal_index)
-        elif pair_type == 'Dark Train':
-            sg_pairs = generate_sg_fixed_cue_1(4, cue_goal_index)
-        elif pair_type in ['Dark Detour', 'Dark Detour No Cue']:
+        elif pair_type in ['Fixed Cue Rotate Twist']:
+            sg_pairs = generate_sg_differentiate_1_twist(2, cue_goal_index)
+        elif pair_type in ['Dark Detour', 'Dark Detour No Cue', 'Fixed No Cue Detour']:
             sg_pairs = generate_sg_fixed_cue_2a(5, cue_goal_index)
-        elif pair_type == 'Dark Reverse':
+        elif pair_type in ['Fixed No Cue Detour Imaging','Fixed Cue 2a Imaging','Fixed Cue On 2a Imaging']:
+            sg_pairs = generate_sg_detour_32PLUS24(5, cue_goal_index)
+        elif pair_type in ['Dark Reverse', 'Fixed No Cue Switch', 'Fixed No Cue Switch Imaging']:
             sg_pairs = generate_sg_fixed_cue_1(10, cue_goal_index)
         elif pair_type in ['Rotate Train', 'Rotate Train Imaging']:
             sg_pairs = generate_sg_differentiate_1(4, cue_goal_index)
@@ -6630,9 +7252,9 @@ class MainWindow(QMainWindow):
         elif cue_goal_index == 3:  # N/SE association
             return (trial_goal + 1) % 4
         elif cue_goal_index == 2:
-            return (trial_goal + 2) % 4 # N/SW association
+            return (trial_goal + 2) % 4  # N/SW association
         elif cue_goal_index == 1:
-            return (trial_goal + 3) % 4 # N/NW association
+            return (trial_goal + 3) % 4  # N/NW association
 
     def action_vector_list_to_readable(self, action_vector_list, start_goal_pair):
         # avlr: action vector list readable
@@ -6740,7 +7362,7 @@ class MainWindow(QMainWindow):
         dlg.setText('Session paused\nselect Ok to\ncontinue.')
         dlg.setStandardButtons(QMessageBox.Ok)
         dlg.setIcon(QMessageBox.Warning)
-        #advance_vector = dlg.addButton('Adv Vect', QMessageBox.YesRole)
+        # advance_vector = dlg.addButton('Adv Vect', QMessageBox.YesRole)
         dlg.setModal(False)
         dlg.show()
         button = dlg.exec()
@@ -6771,7 +7393,7 @@ class MainWindow(QMainWindow):
                                                                goal_location)
         pass
 
-
+    # Action vector list configured in this function as action_vector_list
     def init_session_data(self):
         # Check that all information is entered before initializing session data
         warning_raise = False
@@ -6867,17 +7489,23 @@ class MainWindow(QMainWindow):
             self.line_edit_IR_lights.setText('255')
             if session_type in ['Fixed LGT', 'Rotating LGT 2', 'Rotating LGT 4A', 'Rotating LGT 4B', 'Fixed Cue 1',
                                 'Fixed Cue 2a', 'Fixed Cue 2b', 'Fixed Cue 3', 'Fixed Cue Switch', 'Fixed No Cue',
-                                'Fixed Cue Rotate', 'Diff LGT 1', 'Diff LGT 2a', 'Diff LGT 2b', 'Diff LGT 3a',
+                                'Fixed Cue Rotate',
+                                'Fixed Cue 1 Twist', 'Fixed Cue Novel Route Twist', 'Fixed No Cue Twist',
+                                'Fixed Cue Rotate Twist', 'Fixed Cue Switch Twist',
+                                'Diff LGT 1', 'Diff LGT 2a', 'Diff LGT 2b', 'Diff LGT 3a',
                                 'Diff LGT 3b', 'Diff LGT 4', 'Diff LGT Cue Delay', 'Diff LGT Cue Delay 1a',
                                 'Diff LGT Cue Delay 1b', 'Diff LGT All Cue Delay', 'Diff LGT Split Cue Delay',
                                 'Diff LGT Switch', 'Diff LGT Cue ITI 1', 'Dark Train', 'Dark Detour',
-                                'Dark Detour No Cue', 'Dark Reverse', 'Rotate Train', 'Rotate Detour', 'Rotate Reverse',
-                                'Rotate Detour Moving', 'Fixed Cue 1 Imaging', 'Fixed Cue 2a Imaging',
+                                'Dark Detour No Cue', 'Fixed No Cue Detour Imaging', 'Fixed No Cue Detour',
+                                'Dark Reverse', 'Rotate Train', 'Rotate Detour', 'Rotate Reverse',
+                                'Rotate Detour Moving', 'Fixed Cue 1 Imaging', 'Fixed Cue On 1 Imaging',
+                                'Fixed Cue 2a Imaging',
                                 'Fixed No Cue Imaging', 'Fixed Cue Rotate Imaging', 'Fixed Cue Switch Imaging',
+                                'Fixed Cue On Switch Imaging',
                                 'Rotate Train Imaging', 'Rotate Detour Imaging', 'Rotate Detour Moving Imaging',
                                 'Rotate Reverse Imaging', 'Rotate Detour 1b Moving', 'Rotate Detour 1b Moving Imaging',
-                                'Fixed Cue 3a', 'Fixed Cue 3a Imaging']:
-
+                                'Fixed Cue 3a', 'Fixed Cue 3a Imaging', 'Fixed No Cue Switch Imaging',
+                                'Fixed Cue On 2a Imaging']:
 
                 self.start_goal_pairs = self.generate_start_goal_pairs(session_seed, session_type,
                                                                        self.label_session_cue_conf_data.text())
@@ -6903,11 +7531,14 @@ class MainWindow(QMainWindow):
                 # append presession state to action vector list
                 self.action_vector_list.append(self.action_states_matrix_LMGT[0][self.start_goal_pairs[0][0]].copy())
                 # append pretrial state to action vector list
-                self.action_vector_list.append(self.action_states_matrix_LMGT[2][self.start_goal_pairs[0][0]][cue_index].copy())
+                self.action_vector_list.append(
+                    self.action_states_matrix_LMGT[2][self.start_goal_pairs[0][0]][cue_index].copy())
                 # append trial start state to action vector list
-                self.action_vector_list.append(self.action_states_matrix_LMGT[3][self.start_goal_pairs[0][0]][cue_index].copy())
+                self.action_vector_list.append(
+                    self.action_states_matrix_LMGT[3][self.start_goal_pairs[0][0]][cue_index].copy())
                 # append trial end state to action vector list
-                self.action_vector_list.append(self.action_states_matrix_LMGT[4][self.start_goal_pairs[0][1]][cue_index].copy())
+                self.action_vector_list.append(
+                    self.action_states_matrix_LMGT[4][self.start_goal_pairs[0][1]][cue_index].copy())
 
                 # factory add the remainder of action vectors to action vector matrix
                 # sgp: start goal pairs
@@ -6955,9 +7586,12 @@ class MainWindow(QMainWindow):
                 self.action_vector_list.clear()
                 print(self.action_states_matrix_LMGTOM[0])
                 self.action_vector_list.append(self.action_states_matrix_LMGTOM[0][self.start_goal_pairs[0][0]].copy())
-                self.action_vector_list.append(self.action_states_matrix_LMGTOM[2][self.start_goal_pairs[0][0]][cue_index].copy())
-                self.action_vector_list.append(self.action_states_matrix_LMGTOM[3][self.start_goal_pairs[0][0]][cue_index].copy())
-                self.action_vector_list.append(self.action_states_matrix_LMGTOM[4][self.start_goal_pairs[0][1]][cue_index].copy())
+                self.action_vector_list.append(
+                    self.action_states_matrix_LMGTOM[2][self.start_goal_pairs[0][0]][cue_index].copy())
+                self.action_vector_list.append(
+                    self.action_states_matrix_LMGTOM[3][self.start_goal_pairs[0][0]][cue_index].copy())
+                self.action_vector_list.append(
+                    self.action_states_matrix_LMGTOM[4][self.start_goal_pairs[0][1]][cue_index].copy())
 
                 # factory add the remainder of action vectors to action vector matrix
                 # sgp: start goal pairs
@@ -7022,28 +7656,37 @@ class MainWindow(QMainWindow):
                 # Make a shuffle vector to randomly pick where cue displays
                 if session_number == '1e' or session_number == 'None':
                     self.action_vector_list = [
-                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0],
                     ]
                     for i in range(1, 33):
-                        delay_interval = int(random.gauss(45,10))
-                        action_vector = [5, 0, delay_interval, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, i]
+                        delay_interval = int(random.gauss(45, 10))
+                        action_vector = [5, 0, delay_interval, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                         0, 0, 0, 0, 0, 0, 0, 0, 0, i]
                         self.action_vector_list.append(action_vector)
 
                 elif session_number == '2e':
                     self.action_vector_list = [
-                        [0,  0,  0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [6,  0, 60, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                        [6,  0, 30, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
-                        [6, 15, 30, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3],
-                        [6, 12, 30, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4],
-                        [6,  7, 30, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5],
-                        [6, 10,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6],
+                        [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0],
+                        [6, 0, 60, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         1],
+                        [6, 0, 30, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         2],
+                        [6, 15, 30, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         3],
+                        [6, 12, 30, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         4],
+                        [6, 7, 30, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         5],
+                        [6, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         6],
                     ]
                     for i in range(7, 40):
-                        delay_interval = int(random.gauss(45,10))
-                        action_vector = [5, 0, delay_interval, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, i]
+                        delay_interval = int(random.gauss(45, 10))
+                        action_vector = [5, 0, delay_interval, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                         0, 0, 0, 0, 0, 0, 0, 0, 0, i]
                         self.action_vector_list.append(action_vector)
-
 
                 # append pretrial state to action vector list
 
@@ -7158,13 +7801,17 @@ class MainWindow(QMainWindow):
                 # append presession state to action vector list
                 if session_number == '1e' or session_number == 'None':
                     self.action_vector_list = [
-                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [0, 0, 900, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0],
+                        [0, 0, 900, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         1]
                     ]
                 elif session_number == '2e':
                     self.action_vector_list = [
-                        [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [0, 0, 900, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+                        [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0],
+                        [0, 0, 900, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         1]
                     ]
                 # append pretrial state to action vector list
 
@@ -7206,7 +7853,7 @@ class MainWindow(QMainWindow):
         elif zone == 4:
             return [139, 0], [194, 35]
         elif zone == 5:
-            return [193,0], [239, 0], [239,46]
+            return [193, 0], [239, 0], [239, 46]
         elif zone == 6:
             return [0, 45], [34, 100]
         elif zone == 7:
@@ -7243,26 +7890,26 @@ class MainWindow(QMainWindow):
             return [-1, -2], [-1, -2]
 
     def display_video(self, frame, x, y, zone):
-        scale = 2 # 1 is scale on 240 x 240
+        scale = 2  # 1 is scale on 240 x 240
         self.video_coordinate_stream = [zone, x, y]
         # USE MotionTrack_SocketStream_CameraAllign.py on rasp to allign camera
         magnitude = 2
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         if zone == 1 or zone == 5 or zone == 17 or zone == 21:
             c1, c2, c3 = self.zone_cordinates(zone)
-            c1 = [scale*c for c in c1]
-            c2 = [scale*c for c in c2]
-            c3 = [scale*c for c in c3]
-            poly_coordinates = np.array([[c1,c2,c3]],np.int32)
-            poly_coordinates = poly_coordinates.reshape((-1,1,2))
-            cv2.polylines(frame, [poly_coordinates], True, (255,255,0),scale)
+            c1 = [scale * c for c in c1]
+            c2 = [scale * c for c in c2]
+            c3 = [scale * c for c in c3]
+            poly_coordinates = np.array([[c1, c2, c3]], np.int32)
+            poly_coordinates = poly_coordinates.reshape((-1, 1, 2))
+            cv2.polylines(frame, [poly_coordinates], True, (255, 255, 0), scale)
         else:
             x_rect_rat_cordinates, y_rect_rat_cordinates = self.zone_cordinates(zone)
-            x_rect_rat_cordinates = [scale*x for x in x_rect_rat_cordinates]
-            y_rect_rat_cordinates = [scale*y for y in y_rect_rat_cordinates]
+            x_rect_rat_cordinates = [scale * x for x in x_rect_rat_cordinates]
+            y_rect_rat_cordinates = [scale * y for y in y_rect_rat_cordinates]
             cv2.rectangle(frame, x_rect_rat_cordinates, y_rect_rat_cordinates, (0, 0, 255), scale)
 
-        #Allignment lines
+        # Allignment lines
         # cv2.rectangle(frame, (28, 28), (236, 236), (0, 0, 255), 2)
         # cv2.rectangle(frame, (238, 238), (448, 448), (0, 0, 255), 2)
         # cv2.rectangle(frame, (238, 28), (448, 236), (0, 0, 255), 2)
@@ -7272,7 +7919,7 @@ class MainWindow(QMainWindow):
         # cv2.rectangle(frame, (446, 446), (452, 452), (0, 255, 0), -1)
         # cv2.rectangle(frame, (26, 446), (32, 452), (0, 255, 0), -1)
 
-        cv2.circle(frame, (scale*x, scale*y), scale*2, (0, 255, 0), -1)
+        cv2.circle(frame, (scale * x, scale * y), scale * 2, (0, 255, 0), -1)
         frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
         height, width, channels = frame.shape
         bytes_per_line = width * channels
@@ -7563,7 +8210,6 @@ class MainWindow(QMainWindow):
             if 'Imaging' in sess_type:
                 self.control_IR_lights_off()
 
-
         # Check if cue displays are running
         if self.state_cue_display[0] == 0:
             self.control_connect_display()
@@ -7575,7 +8221,7 @@ class MainWindow(QMainWindow):
             time.sleep(1)
 
         # Cut power to monitors so rats are put in complete darkness
-        #self.control_display_power_off()
+        # self.control_display_power_off()
 
         # if no testing add session to database
         if not testing:
@@ -7590,7 +8236,8 @@ class MainWindow(QMainWindow):
             if behavior == 'Landmark Guided Task':
                 dir_name = (name + '_' + sess_type + '_' + session_num +
                             '_' + sess_date + '_' + sess_time)
-                dir_parent = '/media/blairlab/WD_BLACK/Maze Control Data/Session Data/LGT Data'
+                # dir_parent = '/media/blairlab/WD_BLACK/Maze Control Data/Session Data/LGT Data'
+                dir_parent = '/media/blairlab/Seagate Backup Plus Drive/LGT Data'
                 path_to_dir = os.path.join(dir_parent, dir_name)
             elif behavior == 'Path Integration Guided Task':
                 dir_name = (name + '_' + sess_type + '_' + session_num +
@@ -7674,7 +8321,7 @@ class MainWindow(QMainWindow):
             self.button_all_barriers_down.setEnabled(True)
             self.button_pause_session.setEnabled(False)
             return
-        #self.control_display_power_on()
+        # self.control_display_power_on()
         self.session_start_time_offset = self.worker_trsv.session_video_offset_time
         self.thread_run_session_control(path_to_dir, testing)
 
@@ -7805,8 +8452,8 @@ class MainWindow(QMainWindow):
         # for changing barriers at any other condition, except reward
         # when barrier configuration is ignored).
         if (action_vector[0] == 2 and action_vector[1] == 15 or
-            action_vector[0] == 2 and action_vector[1] == 11 or
-                action_vector[0] in [0,1,3,6]):
+                action_vector[0] == 2 and action_vector[1] == 11 or
+                action_vector[0] in [0, 1, 3, 6]):
             for i in range(16):
                 if action_vector[i + 3] != self.state_barrier_list[i]:
                     self.control_actuator(i)
@@ -7832,7 +8479,7 @@ class MainWindow(QMainWindow):
             # passing on pretrial conditions
             pass
 
-        # 3) Change cue configuration (Don't do anychange ITI action_vector[0] == 1
+        # 3) Change cue configuration (Don't do any change ITI action_vector[0] == 1
         # Case 1: Fist get the cue config action vector 2 to display cue when maze starts
         # up and rat is put in environment.
         if (action_vector[0] == 0 or action_vector[0] == 1) and \
@@ -8216,6 +8863,7 @@ class MainWindow(QMainWindow):
             json.dump(self.actuator_parameters, f, ensure_ascii=False, indent=4)
         with open('syringe_pump_parameters_list_30ml.json', 'w', encoding='utf-8') as f:
             json.dump(self.syringe_pump_parameters_list, f, ensure_ascii=False, indent=4)
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
