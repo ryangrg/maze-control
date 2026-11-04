@@ -255,7 +255,7 @@ Trial sequences are pseudo-randomly generated so that no start arm repeats more 
 
 2. **Raspberry Pi Setup** — Install dependencies, configure the Pi Camera, and deploy the motion tracking and stimulus display scripts. Ensure SSH key-based authentication is set up from the Ubuntu host.
 
-3. **Ubuntu Host** — Install Python dependencies, initialize `MazeControl.db`, configure `actuator_parameters.json` and syringe pump parameter files for your hardware, then launch:
+3. **Ubuntu Host** — Install Python dependencies, set up `Ubuntu/MazeControl.db` (see [Database](#database)), configure `actuator_parameters.json` and syringe pump parameter files for your hardware, then launch:
    ```bash
    python3 main_ryan.py
    ```
@@ -268,6 +268,24 @@ Session data is logged to both the SQLite database (`MazeControl.db`) and per-se
 - **Session data** — timestamps, trial counts, scores, reward locations
 - **Trial data** — per-trial timing, error counts, turn sequences, zone visits
 - **Video stream** — embedded frame-level metadata (step count, timestamp, x/y coordinates, zone)
+
+## Database
+
+`main_ryan.py` opens `MazeControl.db` in the same folder as the script (`Ubuntu/MazeControl.db`) and stops with an error if it is missing, rather than starting an empty one. The database holds subject and session records, so it is not tracked by git (`*.db` in `.gitignore`).
+
+**On the rig**, copy the existing database rather than building a new one, so records stay in one file. Use SQLite's backup (not `cp`) so the copy is consistent, with no session running:
+
+```bash
+python3 -c "import sqlite3; s=sqlite3.connect('file:/path/to/old/MazeControl.db?mode=ro', uri=True); d=sqlite3.connect('Ubuntu/MazeControl.db'); s.backup(d); d.close()"
+```
+
+The copy and the original then diverge: sessions run from this folder are logged here only. When switching the rig over from an older folder, take a fresh copy at that point.
+
+**On a new machine**, build an empty database from [`Ubuntu/schema.sql`](Ubuntu/schema.sql), the schema the code expects (column order as in the rig's database; `PRAGMA user_version` gives its version):
+
+```bash
+sqlite3 Ubuntu/MazeControl.db < Ubuntu/schema.sql
+```
 
 ## License
 

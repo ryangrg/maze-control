@@ -1878,9 +1878,14 @@ class MainWindow(QMainWindow):
     def init_shared_objects(self):
         # Any pyqt objects that are shared across functions will be created where they are used in the layout
         # DATABASE CONNECTION
+        # Both connections open the same file next to this script (not tracked by git, see README)
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MazeControl.db')
+        if not os.path.exists(db_path):
+            # sqlite would otherwise create an empty database here and the session would log into it
+            raise FileNotFoundError(f'{db_path} not found; copy or build it as described in the README')
         self.db_connection = QSqlDatabase.addDatabase('QSQLITE')
-        self.db_connection.setDatabaseName('MazeControl.db')
-        self.db_conn_dir = sqlite3.connect("/home/blairlab/PycharmProjects/MazeControl/MazeControl.db")
+        self.db_connection.setDatabaseName(db_path)
+        self.db_conn_dir = sqlite3.connect(db_path)
         self.db_cursor = self.db_conn_dir.cursor()
 
         # Create a SoundControl Class Instance
