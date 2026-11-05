@@ -30,7 +30,6 @@ import msgpack_numpy as m
 m.patch()
 
 from functools import partial
-from npsocket import NPSocket
 from PyQt5.QtSql import QSqlDatabase, QSqlTableModel
 from PyQt5.QtCore import (Qt, QAbstractTableModel, QPoint, QDate, QMutex, QObject,
                           QThread, pyqtSignal, pyqtSlot, QVariant, QTimer)
