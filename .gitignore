@@ -44,3 +44,5 @@ __temp__/
 
 # Keep static stimuli only
 !src/static_stim/*.png
+# Machine-specific settings (real IP addresses); see Ubuntu/local_config.example.json
+Ubuntu/local_config.json

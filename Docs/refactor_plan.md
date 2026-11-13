@@ -15,6 +15,8 @@ Ground rules
   (local config file, ignored).
 - Every session type in `main_ryan.py` keeps working (about 60: 55 with a start-goal branch in
   `generate_start_goal_pairs`, plus Exposure, the LGT dialog types and `Fixed Cue On-Off Imaging`).
+  Retired on purpose: `LGTOM` (last run 2022-05-09; it used the UV cue lights, which were removed
+  in T1).
 - The refactor reproduces current behaviour exactly, including the white noise as it is now.
   Protocol changes (see Findings) are separate, deliberate and recorded.
 - New or changed protocols are previewed and approved (P2c) before their goldens enter CI:

@@ -47,9 +47,9 @@ The system coordinates all hardware across three computing platforms — an Ubun
 │ │MotionTrack   │ │  │  │ x16        │ └──────────────┘            │
 │ │(picam2 +     │ │  │  └────────────┘                             │
 │ │ OpenCV)      │ │  │  ┌────────────┐ ┌──────────────┐            │
-│ └──────────────┘ │  │  │ Light      │ │ Cue Light    │ x4         │
-│ ┌──────────────┐ │  │  │ Controller │ │ Controllers  │            │
-│ │StimulusDisp  │ │  │  └────────────┘ └──────────────┘            │
+│ └──────────────┘ │  │  │ Light      │                             │
+│ ┌──────────────┐ │  │  │ Controller │                             │
+│ │StimulusDisp  │ │  │  └────────────┘                             │
 │ │A & B (pygame)│ │  │                                             │
 │ └──────────────┘ │  └─────────────────────────────────────────────┘
 └──────────────────┘
@@ -97,7 +97,7 @@ maze-control/
 The host application is a **PyQt5** GUI titled *"Maze Control: Main Window"* with three main panels:
 
 - **Video Panel** — Displays a live overhead camera feed from the Raspberry Pi. The video stream is received via ZeroMQ (PUB/SUB) and decoded with `msgpack`. A green tracking dot overlays the detected position of the subject on a 240×240 zone map.
-- **Device Control Panel** — A spatial grid of buttons mirroring the physical maze layout, providing manual control of all 16 barrier actuators (A1–A16), 4 syringe pumps (R1–R4), 4 cue lights (UV1–UV4), 4 visual cue displays (N/E/S/W CUE), room lights, IR lights, and video settings.
+- **Device Control Panel** — A spatial grid of buttons mirroring the physical maze layout, providing manual control of all 16 barrier actuators (A1–A16), 4 syringe pumps (R1–R4), 4 visual cue displays (N/E/S/W CUE), room lights, IR lights, and video settings.
 - **Session Control Tab** — Manages automated experimental sessions including subject selection, session type configuration (2S2C acquisition, novel route probes, reversal probes, cue rotation, exposure, etc.), action vector tables defining barrier/cue/reward states for each trial event, real-time trial scoring, and data logging to SQLite and CSV.
 
 The GUI supports over 30 session configurations spanning acquisition training, novel route probes, reversal probes, cue rotation, and imaging-compatible modes.
@@ -110,7 +110,6 @@ Python classes wrapping communication protocols:
 - **`Actuator`** — Controls barrier raise/lower with configurable PWM, timing, and deceleration.
 - **`SyringePump`** — Delivers precise fluid rewards via stepper motor control (steps, speed, step-back to prevent dripping).
 - **`RoomLights`** — PWM brightness control for visible and IR illumination.
-- **`CueLight`** — UV cue light pulse control.
 - **`StimulusDisplay`** — Manages SSH-launched pygame display scripts on remote Raspberry Pis via ZeroMQ REQ/REP.
 
 ### Raspberry Pi — Motion Tracking (`MotionTrack_ZeroMQ_picam2.py`)
@@ -268,6 +267,21 @@ Session data is logged to both the SQLite database (`MazeControl.db`) and per-se
 - **Session data** — timestamps, trial counts, scores, reward locations
 - **Trial data** — per-trial timing, error counts, turn sequences, zone visits
 - **Video stream** — embedded frame-level metadata (step count, timestamp, x/y coordinates, zone)
+
+## Local configuration
+
+Machine-specific settings live in `Ubuntu/local_config.json`, which is not tracked by git so the real network addresses stay out of this public repository. Copy the example and fill in the addresses of the tracking Pi and the two display Pis:
+
+```bash
+cp Ubuntu/local_config.example.json Ubuntu/local_config.json
+```
+
+| Key | Used by |
+|---|---|
+| `video_pi_host` | `main_ryan.py` video threads: ZeroMQ stream, launching the tracker over SSH, copying its NTP start time |
+| `display_a_host`, `display_b_host` | `MazeControl_ZMQ.StimulusDisplay`: launching and talking to the two display Pis |
+
+`main_ryan.py` stops with an error naming the file if it is missing. (`main_2c2s.py` is kept as it ran and still has its own addresses in the code.)
 
 ## Database
 

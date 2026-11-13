@@ -1,0 +1,5 @@
+{
+    "video_pi_host": "0.0.0.0",
+    "display_a_host": "0.0.0.0",
+    "display_b_host": "0.0.0.0"
+}

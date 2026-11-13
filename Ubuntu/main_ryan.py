@@ -8,6 +8,7 @@ Created on Tue Aug 17 12:50:46 2021
 import zmq
 
 import MazeControl_ZMQ as mzc
+import local_config
 
 import copy
 import csv
@@ -58,15 +59,12 @@ class WorkerDeviceControlThread(QObject):
     barrier_index = pyqtSignal(int)
     cue_index = pyqtSignal(int)
     reward_index = pyqtSignal(int)
-    cue_light_index = pyqtSignal(int)
 
-    def __init__(self, action_vector, state_barrier_list, state_cue_list,
-                 state_cue_light_list):
+    def __init__(self, action_vector, state_barrier_list, state_cue_list):
         super(WorkerDeviceControlThread, self).__init__()
         self.action_vector = action_vector
         self.state_barrier_list = state_barrier_list
         self.state_cue_list = state_cue_list
-        self.state_cue_light_list = state_cue_light_list
 
     # Make sure video stream is on to get zone
     def run(self):
@@ -96,11 +94,6 @@ class WorkerDeviceControlThread(QObject):
                 self.reward_index.emit(i)
                 break
 
-        # 2 Check which light if any should turn on and
-        for i, av in enumerate(self.action_vector[27:31]):
-            if av != self.state_cue_light_list[i]:
-                self.cue_light_index.emit(i)
-                break
         # 3 Check barrier states and emit signal to actuator control
         intermodbus_sleep_time = 0.250
         # Shift indexes such that barriers close right behind animal
@@ -200,7 +193,6 @@ class WorkerSessionControlThread(QObject):
     cue_index = pyqtSignal(int)
     reward_index = pyqtSignal(int)
     start_reward_locations = pyqtSignal(int)
-    cue_light_index = pyqtSignal(int)
     trigger_action_vector = pyqtSignal(list)
     db_session_event = pyqtSignal(list)
     db_session = pyqtSignal(list)
@@ -227,8 +219,7 @@ class WorkerSessionControlThread(QObject):
         self.start_delay = sgi['delay']
         self.start_goal_pairs = sgi['start_goal_pairs']
         self.state_barrier_list = state_list[0]
-        self.state_cue_light_list = state_list[1]
-        self.state_cue_list = state_list[2]
+        self.state_cue_list = state_list[1]
         self.event_stream = event_stream
         self.msg = []
         self.path_to_dir = path_to_dir
@@ -1271,7 +1262,7 @@ class WorkerSessionVideoThread(QObject):
     def __init__(self, sgi, fps=10, shutter_speed=4000, iso=4000, varThreshold=10,
                  path_to_dir=None, thread_testing=False):
         super(WorkerSessionVideoThread, self).__init__()
-        self.HOST = '0.0.0.0'
+        self.HOST = local_config.load()['video_pi_host']
         self.PORT_REQ = 5101
         self.PORT_SUB = 5102
         self.fps = fps
@@ -1397,7 +1388,7 @@ class WorkerVideoThread(QObject):
 
     def __init__(self, fps=10, shutter_speed=4000, iso=4000, varThreshold=10):
         super(WorkerVideoThread, self).__init__()
-        self.HOST = '0.0.0.0'
+        self.HOST = local_config.load()['video_pi_host']
         self.PORT_REQ = 5101
         self.PORT_SUB = 5102
         self.fps = fps
@@ -1642,7 +1633,7 @@ class AddSubjectDialog(QDialog):
         combo_box_cue_reward_orientation.setLineEdit(self.cue_goal_field)
 
         # retained cue defined by amount of separation between cue/goal indexes
-        self.list_session_type_cue = ['Exposure', 'LGTOM', 'Fixed LGT', 'Rotating LGT 2', 'Rotating LGT 4', 'RDT Task',
+        self.list_session_type_cue = ['Exposure', 'Fixed LGT', 'Rotating LGT 2', 'Rotating LGT 4', 'RDT Task',
                                       'None']
         combo_box_session_type = QComboBox()
         combo_box_session_type.addItems(self.list_session_type_cue)
@@ -1903,11 +1894,6 @@ class MainWindow(QMainWindow):
         for i in modbus_syringe_pump_id:
             self.modbus_syringe_pump_list.append(mzc.SyringePump(i, timeout_arduino_modbus, 1))
 
-        self.modbus_cue_light_list = []
-        modbus_cue_light_id = [2, 6, 10, 14]
-        for i in modbus_cue_light_id:
-            self.modbus_cue_light_list.append(mzc.CueLight(i, timeout_arduino_modbus, 1))
-
         self.modbus_room_lights = mzc.RoomLights(21, timeout_arduino_modbus, 1)
 
         self.monitor_cue = mzc.StimulusDisplay()
@@ -1924,8 +1910,6 @@ class MainWindow(QMainWindow):
         # State variables that represent states of different components in maze
         # Binary list of barrier states index key [0:1, 1:2, ...]
         self.state_barrier_list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        # 0: Off, 1: On index key[0:1, 1:2,...]
-        self.state_cue_light_list = [0, 0, 0, 0]
         # 0: Off, 1: On index key[0:North, 1:East, 2:South, 3:West, 4:None]
         # TODO: Add state of lights being on
 
@@ -1947,7 +1931,7 @@ class MainWindow(QMainWindow):
         self.state_video = [0]
 
         # List of state variables to pass by reference to threads
-        self.state_list = [self.state_barrier_list, self.state_cue_light_list, self.state_cue_list,
+        self.state_list = [self.state_barrier_list, self.state_cue_list,
                            self.state_cue_display, self.state_room_lights, self.state_session,
                            self.state_session_video, self.state_session_control, self.state_video,
                            self.state_IR_lights]
@@ -1963,7 +1947,7 @@ class MainWindow(QMainWindow):
         # 3-18: Barrier state 0 for down and 1 for up 3 is B1 and 4 is B2 ....
         # 19-22: Cue config index key [20:N, 21:E, 22:S, 23:W]
         # 23-26: reward config, index key [0:NE, 1:SE, 2:SW, 3:NW]
-        # 27-30: light-config, index [0:UV1, 1:UV2, 2:UV3, 3:UV4] THIS IS NO LONGER USED (Was a cue for start arm).
+        # 27-30: unused (UV cue lights at the start arms, retired); kept so later indexes don't shift
         # 31: index in action vector list
         # LMGT: Landmark guided task
         # 0: presesion start arm
@@ -2119,165 +2103,6 @@ class MainWindow(QMainWindow):
              ]
         ]
 
-        # Landmark Guided Task Open Maze LMGTOM: Start is the entire middle of the maze.
-        # Same comments on indexing as for LMGT just different configurations for each part of the session
-        # 0 PRESESSION
-        presession_n_vec_LMGTOM = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        presession_e_vec_LMGTOM = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        presession_s_vec_LMGTOM = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        presession_w_vec_LMGTOM = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-
-        # 1 ITI
-        iti_n_vec_LMGTOM = [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-                            -1]
-        iti_e_vec_LMGTOM = [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-                            -1]
-        iti_s_vec_LMGTOM = [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-                            -1]
-        iti_w_vec_LMGTOM = [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
-                            -1]
-
-        # 2 PRETRIAL
-        # entering north start arm
-        pretrial_n_n_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_n_e_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_n_s_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_n_w_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        # entering east start arm
-        pretrial_e_n_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_e_e_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_e_s_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_e_w_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        # entering south start arm
-        pretrial_s_n_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_s_e_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_s_s_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_s_w_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        # entering west start arm
-        pretrial_w_n_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_w_e_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_w_s_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-        pretrial_w_w_vec_LMGTOM = [2, 11, 10, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                   0, 0, 0, -1]
-
-        # 3 TRIAL START
-        trialstart_n_n_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_n_e_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_n_s_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_n_w_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-
-        trialstart_e_n_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_e_e_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_e_s_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_e_w_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-
-        trialstart_s_n_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_s_e_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_s_s_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_s_w_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-
-        trialstart_w_n_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_w_e_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_w_s_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-        trialstart_w_w_vec_LMGTOM = [3, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-                                     0, 0, 0, 0, -1]
-
-        # 4 TRIAL END
-        # northeast goal
-        trialend_ne_n_vec_LMGTOM = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0,
-                                    0, 0, 0, -1]
-        trialend_ne_e_vec_LMGTOM = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0,
-                                    0, 0, 0, -1]
-        trialend_ne_s_vec_LMGTOM = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0,
-                                    0, 0, 0, -1]
-        trialend_ne_w_vec_LMGTOM = [4, 21, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0,
-                                    0, 0, 0, -1]
-        # southeast goal
-        trialend_se_n_vec_LMGTOM = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0,
-                                    0, 0, 0, -1]
-        trialend_se_e_vec_LMGTOM = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0,
-                                    0, 0, 0, -1]
-        trialend_se_s_vec_LMGTOM = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0,
-                                    0, 0, 0, -1]
-        trialend_se_w_vec_LMGTOM = [4, 17, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0,
-                                    0, 0, 0, -1]
-        # southwest goal
-        trialend_sw_n_vec_LMGTOM = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0,
-                                    0, 0, 0, -1]
-        trialend_sw_e_vec_LMGTOM = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0,
-                                    0, 0, 0, -1]
-        trialend_sw_s_vec_LMGTOM = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0,
-                                    0, 0, 0, -1]
-        trialend_sw_w_vec_LMGTOM = [4, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0,
-                                    0, 0, 0, -1]
-        # northwest goal
-        trialend_nw_n_vec_LMGTOM = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0,
-                                    0, 0, 0, -1]
-        trialend_nw_e_vec_LMGTOM = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0,
-                                    0, 0, 0, -1]
-        trialend_nw_s_vec_LMGTOM = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
-                                    0, 0, 0, -1]
-        trialend_nw_w_vec_LMGTOM = [4, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0,
-                                    0, 0, 0, -1]
-
-        self.action_states_matrix_LMGTOM = [
-            [presession_n_vec_LMGTOM, presession_e_vec_LMGTOM, presession_s_vec_LMGTOM, presession_w_vec_LMGTOM],
-            [iti_n_vec_LMGTOM, iti_e_vec_LMGTOM, iti_s_vec_LMGTOM, iti_w_vec_LMGTOM],
-            [[pretrial_n_n_vec_LMGTOM, pretrial_n_e_vec_LMGTOM, pretrial_n_s_vec_LMGTOM, pretrial_n_w_vec_LMGTOM],
-             [pretrial_e_n_vec_LMGTOM, pretrial_e_e_vec_LMGTOM, pretrial_e_s_vec_LMGTOM, pretrial_e_w_vec_LMGTOM],
-             [pretrial_s_n_vec_LMGTOM, pretrial_s_e_vec_LMGTOM, pretrial_s_s_vec_LMGTOM, pretrial_s_w_vec_LMGTOM],
-             [pretrial_w_n_vec_LMGTOM, pretrial_w_e_vec_LMGTOM, pretrial_w_s_vec_LMGTOM, pretrial_w_w_vec_LMGTOM]
-             ],
-            [[trialstart_n_n_vec_LMGTOM, trialstart_n_e_vec_LMGTOM, trialstart_n_s_vec_LMGTOM,
-              trialstart_n_w_vec_LMGTOM],
-             [trialstart_e_n_vec_LMGTOM, trialstart_e_e_vec_LMGTOM, trialstart_e_s_vec_LMGTOM,
-              trialstart_e_w_vec_LMGTOM],
-             [trialstart_s_n_vec_LMGTOM, trialstart_s_e_vec_LMGTOM, trialstart_s_s_vec_LMGTOM,
-              trialstart_s_w_vec_LMGTOM],
-             [trialstart_w_n_vec_LMGTOM, trialstart_w_e_vec_LMGTOM, trialstart_w_s_vec_LMGTOM,
-              trialstart_w_w_vec_LMGTOM]
-             ],
-            [[trialend_ne_n_vec_LMGTOM, trialend_ne_e_vec_LMGTOM, trialend_ne_s_vec_LMGTOM, trialend_ne_w_vec_LMGTOM],
-             [trialend_se_n_vec_LMGTOM, trialend_se_e_vec_LMGTOM, trialend_se_s_vec_LMGTOM, trialend_se_w_vec_LMGTOM],
-             [trialend_sw_n_vec_LMGTOM, trialend_sw_e_vec_LMGTOM, trialend_sw_s_vec_LMGTOM, trialend_sw_w_vec_LMGTOM],
-             [trialend_nw_n_vec_LMGTOM, trialend_nw_e_vec_LMGTOM, trialend_nw_s_vec_LMGTOM, trialend_nw_w_vec_LMGTOM]
-             ]
-        ]
-
         # PATH INTEGRATION GUIDED TASK
         # index value pairing for PIGT is as follows
         # 0: Action-type (0: Presession, 1: ITI, 2: Pretrial, 3: Trial start,
@@ -2290,7 +2115,7 @@ class MainWindow(QMainWindow):
         # 3-18: Barrier state 0 for down and 1 for up 3 is B1 and 4 is B2 ....
         # 19-22: Cue config index key [20:N, 21:E, 22:S, 23:W]
         # 23-27: reward config, index key [0:NE, 1:SE, 2:SW, 3:NW]
-        # 28-31: light-config, index [0:UV1, 1:UV2, 2:UV3, 3:UV4]
+        # 28-31: unused (UV cue lights, retired)
         # 32: index in action vector list
         # PIGT: Landmark guided task
         # 0: presesion start arm
@@ -2546,14 +2371,6 @@ class MainWindow(QMainWindow):
             self.button_barrier_list[i].setStyleSheet('background-color: khaki')
             self.button_barrier_list[i].clicked.connect(lambda state, var=i: self.control_actuator(var))
 
-        # UV Light buttons
-        self.button_cue_light_list = []
-        for i in range(4):
-            self.button_cue_light_list.append(QPushButton(f'UV{i + 1}\nOFF'))
-            self.button_cue_light_list[i].setFixedSize(button_sz, button_sz)
-            self.button_cue_light_list[i].setStyleSheet('background-color: Thistle')
-            self.button_cue_light_list[i].clicked.connect(lambda state, var=i: self.control_cue_light(var))
-
         # Cue Display
         cue_label = ['N', 'E', 'S', 'W']
         self.button_cue_list = []
@@ -2657,7 +2474,6 @@ class MainWindow(QMainWindow):
         # first row
         button_grid.addWidget(button_reward_list[3], 0, 0)
         button_grid.addWidget(self.button_barrier_list[5], 0, 3)
-        button_grid.addWidget(self.button_cue_light_list[1], 0, 4)
         button_grid.addWidget(self.button_barrier_list[3], 0, 5)
         button_grid.addWidget(button_reward_list[0], 0, 8)
         # second row
@@ -2669,14 +2485,12 @@ class MainWindow(QMainWindow):
         button_grid.addWidget(self.button_barrier_list[13], 3, 4)
         button_grid.addWidget(self.button_barrier_list[2], 3, 8)
         # fifth row
-        button_grid.addWidget(self.button_cue_light_list[2], 4, 0)
         button_grid.addWidget(self.button_barrier_list[7], 4, 1)
         button_grid.addWidget(self.button_cue_list[3], 4, 2)
         button_grid.addWidget(self.button_barrier_list[14], 4, 3)
         button_grid.addWidget(self.button_barrier_list[12], 4, 5)
         button_grid.addWidget(self.button_cue_list[1], 4, 6)
         button_grid.addWidget(self.button_barrier_list[1], 4, 7)
-        button_grid.addWidget(self.button_cue_light_list[0], 4, 8)
         # sixth row
         button_grid.addWidget(self.button_barrier_list[8], 5, 0)
         button_grid.addWidget(self.button_barrier_list[15], 5, 4)
@@ -2688,7 +2502,6 @@ class MainWindow(QMainWindow):
         # ninth row
         button_grid.addWidget(button_reward_list[2], 8, 0)
         button_grid.addWidget(self.button_barrier_list[9], 8, 3)
-        button_grid.addWidget(self.button_cue_light_list[3], 8, 4)
         button_grid.addWidget(self.button_barrier_list[11], 8, 5)
         button_grid.addWidget(button_reward_list[1], 8, 8)
         button_grid_frame = QFrame()
@@ -7157,7 +6970,7 @@ class MainWindow(QMainWindow):
             sg_pairs = generate_sg_rotating_2(6)
         elif pair_type == 'Rotating LGT 4A':
             sg_pairs = generate_sg_rotating_4A(3)
-        elif pair_type == 'Rotating LGT 4B' or pair_type == 'LGTOM':
+        elif pair_type == 'Rotating LGT 4B':
             sg_idx = [0, 1, 2, 3]
             sg_pairs_1 = generate_sg_pairs_3(sg_idx)
             sg_pairs_2 = generate_sg_pairs_3(sg_idx)
@@ -7579,58 +7392,6 @@ class MainWindow(QMainWindow):
                 self.action_vec_table.resizeRowsToContents()
                 self.action_vec_table.setColumnHidden(9, True)
 
-            elif session_type == 'LGTOM':
-                self.start_goal_pairs = self.generate_start_goal_pairs(session_seed, session_type)
-                self.session_general_info['start_goal_pairs'] = self.start_goal_pairs
-                cue_goal_index = self.set_cue_goal_index(self.label_cue_conf_data.text())
-                self.session_general_info['cue_goal_index'] = cue_goal_index
-                cue_index = self.cue_trial_index(cue_goal_index, self.start_goal_pairs[0][1])
-                self.session_general_info['cue_index'] = cue_index
-
-                self.action_vector_list.clear()
-                print(self.action_states_matrix_LMGTOM[0])
-                self.action_vector_list.append(self.action_states_matrix_LMGTOM[0][self.start_goal_pairs[0][0]].copy())
-                self.action_vector_list.append(
-                    self.action_states_matrix_LMGTOM[2][self.start_goal_pairs[0][0]][cue_index].copy())
-                self.action_vector_list.append(
-                    self.action_states_matrix_LMGTOM[3][self.start_goal_pairs[0][0]][cue_index].copy())
-                self.action_vector_list.append(
-                    self.action_states_matrix_LMGTOM[4][self.start_goal_pairs[0][1]][cue_index].copy())
-
-                # factory add the remainder of action vectors to action vector matrix
-                # sgp: start goal pairs
-                for sgp in self.start_goal_pairs[1:]:
-                    cue_index = self.cue_trial_index(cue_goal_index, sgp[1])
-                    self.action_vector_list.append(self.action_states_matrix_LMGTOM[1][sgp[0]].copy())
-                    self.action_vector_list.append(self.action_states_matrix_LMGTOM[2][sgp[0]][cue_index].copy())
-                    self.action_vector_list.append(self.action_states_matrix_LMGTOM[3][sgp[0]][cue_index].copy())
-                    self.action_vector_list.append(self.action_states_matrix_LMGTOM[4][sgp[1]][cue_index].copy())
-
-                # Assign appropriate index values to each list
-                for i, avl in enumerate(self.action_vector_list):
-                    avl[31] = i
-
-                self.session_general_info['action_vector_list'] = self.action_vector_list
-
-                self.action_vector_list_readable.clear()
-                # create readable action value list
-                sgp_index = -1
-                for i, avl in enumerate(self.action_vector_list):
-                    if i % 4 == 0:
-                        sgp_index += 1
-                    self.action_vector_list_readable.append(
-                        self.action_vector_list_to_readable(avl, self.start_goal_pairs[sgp_index]))
-
-                self.session_general_info['readable_action_vector_list'] = self.action_vector_list_readable
-                del self.action_vec_table_model
-                self.action_vec_table_model = TableStaticModel(
-                    self.action_vector_list_readable_header,
-                    self.action_vector_list_readable)
-                self.action_vec_table.setModel(self.action_vec_table_model)
-                self.action_vec_table.selectionModel().selectionChanged.connect(self.get_action_vector_idx)
-                self.action_vec_table.resizeRowsToContents()
-                self.action_vec_table.setColumnHidden(9, True)
-
             elif session_type == 'Exposure' or session_type == 'None':
                 if session_number == 'None' or session_number == '1e':
                     self.start_goal_pairs = []
@@ -7969,20 +7730,13 @@ class MainWindow(QMainWindow):
                 self.control_syringe_pump(i)
                 break
 
-        # Check which light if any should be used
-        for i, av in enumerate(action_vector[27:31]):
-            if av != self.state_cue_light_list[i]:
-                self.control_cue_light(i)
-                break
-
     def test_action_vector_thd(self):
         if self.action_vector_idx[0] != '':
             action_vector = self.action_vector_list[self.action_vector_idx[0]]
             print(self.action_vector_list[self.action_vector_idx[0]])
             self.thread_tav = QThread(parent=self)
             self.worker_tav = WorkerDeviceControlThread(action_vector,
-                                                        self.state_barrier_list, self.state_cue_list,
-                                                        self.state_cue_light_list)
+                                                        self.state_barrier_list, self.state_cue_list)
             self.worker_tav.moveToThread(self.thread_tav)
 
             self.thread_tav.started.connect(self.worker_tav.run)
@@ -7994,7 +7748,6 @@ class MainWindow(QMainWindow):
             self.worker_tav.barrier_index.connect(self.control_actuator)
             self.worker_tav.cue_index.connect(self.control_cue)
             self.worker_tav.reward_index.connect(self.control_syringe_pump)
-            self.worker_tav.cue_light_index.connect(self.control_cue_light)
 
             self.thread_tav.start()
         else:
@@ -8388,7 +8141,6 @@ class MainWindow(QMainWindow):
         self.worker_trsc.barrier_index.connect(self.control_actuator)
         self.worker_trsc.cue_index.connect(self.control_cue)
         self.worker_trsc.reward_index.connect(self.control_syringe_pump)
-        self.worker_trsc.cue_light_index.connect(self.control_cue_light)
         self.worker_trsc.update_label_action.connect(self.update_label_current_action)
         self.worker_trsc.trigger_action_vector.connect(self.connect_run_action_vector)
         self.worker_trsc.trigger_actuators.connect(self.connect_control_actuators)
@@ -8592,30 +8344,6 @@ class MainWindow(QMainWindow):
                                                             self.syringe_pump_parameters[index][2],
                                                             self.syringe_pump_parameters[index][3],
                                                             self.syringe_pump_parameters[index][4])
-
-    def control_cue_light_pulse(self, index):
-        if self.state_cue_light_list[index] == 0:
-            self.modbus_cue_light_list[index].turn_on_pulse()
-            self.button_cue_light_list[index].setStyleSheet('background-color: Violet')
-            self.button_cue_light_list[index].setText(f'UV{index + 1}\nON')
-            self.state_cue_light_list[index] = 1
-        elif self.state_cue_light_list[index] == 1:
-            self.modbus_cue_light_list[index].turn_off()
-            self.button_cue_light_list[index].setStyleSheet('background-color: Thistle')
-            self.button_cue_light_list[index].setText(f'UV{index + 1}\nOFF')
-            self.state_cue_light_list[index] = 0
-
-    def control_cue_light(self, index):
-        if self.state_cue_light_list[index] == 0:
-            self.modbus_cue_light_list[index].turn_on()
-            self.button_cue_light_list[index].setStyleSheet('background-color: Violet')
-            self.button_cue_light_list[index].setText(f'UV{index + 1}\nON')
-            self.state_cue_light_list[index] = 1
-        elif self.state_cue_light_list[index] == 1:
-            self.modbus_cue_light_list[index].turn_off()
-            self.button_cue_light_list[index].setStyleSheet('background-color: Thistle')
-            self.button_cue_light_list[index].setText(f'UV{index + 1}\nOFF')
-            self.state_cue_light_list[index] = 0
 
     def control_cue(self, index):
         # print(index, ' ', self.state_cue_list[index])

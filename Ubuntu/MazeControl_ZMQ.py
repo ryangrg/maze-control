@@ -15,6 +15,8 @@ import numpy as np
 import zmq
 import json
 
+import local_config
+
 def update_json(file_name, key, value):
     with open(file_name, 'r+') as f:
         json_file = json.load(f)
@@ -167,40 +169,13 @@ class SyringePump(ModbusCommunication):
         return(time_delivery)
 
 
-class CueLight(ModbusCommunication):
-    def __init__(self, server_id, timeout, port):
-        super().__init__(server_id, timeout, port)
-
-    def turn_on_pulse(self, pulseDelay=500):
-        super().mc_write_register(6, pulseDelay)
-        #time.sleep(0.250)
-        # value of 3 tells arduino to flash light this is combined with actuator control
-        super().mc_write_register(0, 3)
-
-    def turn_on(self):
-        super().mc_write_register(0, 4)
-
-    def turn_off(self):
-        super().mc_write_register(0, 0)
-
-
-class BoardLights(ModbusCommunication):
-    def __init__(self, server_id, timeout, port):
-        super().__init__(server_id, timeout, port)
-
-    def turn_on(self):
-        super().mc_write_register(0, 6)
-
-    def turn_off(self):
-        super().mc_write_register(0, 7)
-
-
 class StimulusDisplay:
 
     def __init__(self):
         self.zmq_context = zmq.Context.instance()
-        self.IP_DISPLAY_A = '0.0.0.0'
-        self.IP_DISPLAY_B = '0.0.0.0'
+        config = local_config.load()
+        self.IP_DISPLAY_A = config['display_a_host']
+        self.IP_DISPLAY_B = config['display_b_host']
         self.PORT_DISPLAY_A = '5001'
         self.PORT_DISPLAY_B = '5002'
         self.PID_display_a = 0
