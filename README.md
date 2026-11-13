@@ -294,6 +294,8 @@ The GUI also reads and rewrites three runtime files in `Ubuntu/`, which are igno
 | `syringe_pump_parameters_list_30ml.json` | per-pump reward delivery settings |
 | `state_variables_ryan.json` | process IDs of the display and video programs on the Pis |
 
+The code reaches the Pis with plain `ssh user@host` and `scp`, and leaves the choice of key to the machine's `~/.ssh/config`. On the rig, a passphrase-less key used only for the three Pis (and accepted by them only from the rig's address) is set there, so sessions start without a passphrase prompt even though the desktop logs in automatically and the GNOME keyring stays locked.
+
 On the rig, copy the current files from the folder sessions last ran from rather than the examples, so the calibration carries over. On a new machine:
 
 ```bash

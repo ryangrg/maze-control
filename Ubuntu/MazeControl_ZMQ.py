@@ -187,7 +187,7 @@ class StimulusDisplay:
     def launchStimulusDisplay(self):
         self.PID_display_a = get_value_json('state_variables_ryan.json', 'PID_display_a')
         if self.PID_display_a == 0:
-            cmd_a = f"ssh -f -i ~/.ssh/id_rsa pi@{self.IP_DISPLAY_A} \"sh -c 'nohup Run_StimulusDisplayRaspiZeroMQ.sh" \
+            cmd_a = f"ssh -f pi@{self.IP_DISPLAY_A} \"sh -c 'nohup Run_StimulusDisplayRaspiZeroMQ.sh" \
                   "> ~/Python/ZMQ_output.txt 2>&1 & exit'\""
             subprocess.call(cmd_a, shell=True)
             self.client_display_a = self.zmq_context.socket(zmq.REQ)
@@ -197,7 +197,7 @@ class StimulusDisplay:
             update_json('state_variables_ryan.json', 'PID_display_a', self.PID_display_a)
             print(f'Display A connected and recv PID: {self.PID_display_a}')
         else:
-            cmd = f"ssh -i ~/.ssh/id_rsa pi@{self.IP_DISPLAY_A} ps -p {self.PID_display_a}"
+            cmd = f"ssh pi@{self.IP_DISPLAY_A} ps -p {self.PID_display_a}"
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = process.communicate()
 
@@ -225,7 +225,7 @@ class StimulusDisplay:
                     print('Nothing is running on Display A, launching Display A script and resetting PID')
                     self.client_display_a.setsockopt(zmq.LINGER, 0)
                     self.client_display_a.close()
-                    cmd_a = f"ssh -f -i ~/.ssh/id_rsa pi@{self.IP_DISPLAY_A} \"sh -c 'nohup Run_StimulusDisplayRaspiZeroMQ.sh" \
+                    cmd_a = f"ssh -f pi@{self.IP_DISPLAY_A} \"sh -c 'nohup Run_StimulusDisplayRaspiZeroMQ.sh" \
                             "> ~/Python/ZMQ_output.txt 2>&1 & exit'\""
                     subprocess.call(cmd_a, shell=True)
                     self.client_display_a = self.zmq_context.socket(zmq.REQ)
@@ -237,7 +237,7 @@ class StimulusDisplay:
 
         self.PID_display_b = get_value_json('state_variables_ryan.json', 'PID_display_b')
         if self.PID_display_b == 0:
-            cmd_b = f"ssh -f -i ~/.ssh/id_rsa pi@{self.IP_DISPLAY_B} \"sh -c 'nohup Run_StimulusDisplayRaspiZeroMQ.sh" \
+            cmd_b = f"ssh -f pi@{self.IP_DISPLAY_B} \"sh -c 'nohup Run_StimulusDisplayRaspiZeroMQ.sh" \
                   "> ~/Python/ZMQ_output.txt 2>&1 & exit'\""
             subprocess.call(cmd_b, shell=True)
             self.client_display_b = self.zmq_context.socket(zmq.REQ)
@@ -247,7 +247,7 @@ class StimulusDisplay:
             update_json('state_variables_ryan.json', 'PID_display_b', self.PID_display_b)
             print(f'Display B connected and recv PID: {self.PID_display_b}')
         else:
-            cmd = f"ssh -i ~/.ssh/id_rsa pi@{self.IP_DISPLAY_B} ps -p {self.PID_display_b}"
+            cmd = f"ssh pi@{self.IP_DISPLAY_B} ps -p {self.PID_display_b}"
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = process.communicate()
 
@@ -274,7 +274,7 @@ class StimulusDisplay:
                     print('Nothing is running on Display B, launching Display B script and resetting PID')
                     self.client_display_b.setsockopt(zmq.LINGER, 0)
                     self.client_display_b.close()
-                    cmd_b = f"ssh -f -i ~/.ssh/id_rsa pi@{self.IP_DISPLAY_B} \"sh -c 'nohup Run_StimulusDisplayRaspiZeroMQ.sh" \
+                    cmd_b = f"ssh -f pi@{self.IP_DISPLAY_B} \"sh -c 'nohup Run_StimulusDisplayRaspiZeroMQ.sh" \
                             "> ~/Python/ZMQ_output.txt 2>&1 & exit'\""
                     subprocess.call(cmd_b, shell=True)
                     self.client_display_b = self.zmq_context.socket(zmq.REQ)

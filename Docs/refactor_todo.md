@@ -62,6 +62,8 @@ How to use it
 
 ## Done
 
+- **T20 Pi connections without a passphrase.** The rig logs in automatically, so the GNOME keyring never unlocks and the `id_rsa` passphrase was asked after every restart. The rig now has `~/.ssh/maze_pis` (no passphrase), installed on the display Pis and the tracker with `from="<rig address>"`, and `~/.ssh/config` uses it for those three hosts (backup `config.bak-2026-11-13`). The display commands no longer force `-i ~/.ssh/id_rsa`. Checked with no agent: ssh to all three Pis and scp from the tracker work without a password.
+
 - **T5 [P0] Runtime files out of git.** `actuator_parameters.json`, `syringe_pump_parameters_list_30ml.json` and `state_variables_ryan.json` are ignored, each with a tracked `.example.json` (calibration examples taken from the rig on 2026-11-13); `actuator_parameters.json` is no longer tracked and the unused `syringe_pump_parameters_milk_30ml.json` is deleted. The rig's clone uses the files copied from the old folder.
 
 - **T19 [P0] Pi addresses in an ignored local config.** `Ubuntu/local_config.py` reads
@@ -75,7 +77,8 @@ How to use it
   shared state list (barrier and cue states moved up one place). LGTOM, the only session type that
   turned the lights on (57 sessions, 2022-04-22 to 2022-05-09), is retired: removed from the
   dialog, its action vectors and its session branch. Checked: both files compile, no references
-  left, pyflakes shows no new undefined names. Not yet run on the rig.
+  left, pyflakes shows no new undefined names. Rig smoke test 2026-11-13: GUI launched from
+  `~/maze-control`, both displays and the tracker connected, clean exit.
 - **Database**: rig database copied into `~/maze-control/Ubuntu` (ignored by git); one path for
   the Qt and sqlite3 connections; startup stops if the file is missing; `Ubuntu/schema.sql` and
   the README's Database section. `eced3b0`
