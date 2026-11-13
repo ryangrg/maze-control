@@ -46,3 +46,8 @@ __temp__/
 !src/static_stim/*.png
 # Machine-specific settings (real IP addresses); see Ubuntu/local_config.example.json
 Ubuntu/local_config.json
+
+# Runtime files the GUI reads and rewrites (calibration, display PIDs); see the *.example.json files
+Ubuntu/actuator_parameters.json
+Ubuntu/syringe_pump_parameters_list_30ml.json
+Ubuntu/state_variables_ryan.json

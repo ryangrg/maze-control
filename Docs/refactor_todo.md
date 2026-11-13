@@ -30,11 +30,8 @@ How to use it
    The rig's copy still has the cue-light and LGTOM code removed in T1, so merge its changes into
    the repo's file rather than copying it over.
 3. **T4 [P0] Session data folder into the local config** (rig: Seagate drive; repo: WD_BLACK).
-4. **T5 [P0] Calibration files**: `actuator_parameters.json` and the syringe-pump JSON as tracked
-   defaults plus untracked local values seeded from the rig. Must be done before anyone runs
-   behaviour from `~/maze-control`, which otherwise uses stale barrier timings. (rig)
-5. **T6 [P0] Tag the as-run state** after T3, e.g. `as-run-2026-11-03`.
-6. **T7 [P1] Lint and compile CI**: `py_compile` and pyflakes on the Python; `arduino-cli compile`
+4. **T6 [P0] Tag the as-run state** after T3, e.g. `as-run-2026-11-03`.
+5. **T7 [P1] Lint and compile CI**: `py_compile` and pyflakes on the Python; `arduino-cli compile`
    with warnings for `arduino:avr:nano`; GitHub Actions on every push.
 
 ## Pool
@@ -64,6 +61,8 @@ How to use it
   or fix it with T2.
 
 ## Done
+
+- **T5 [P0] Runtime files out of git.** `actuator_parameters.json`, `syringe_pump_parameters_list_30ml.json` and `state_variables_ryan.json` are ignored, each with a tracked `.example.json` (calibration examples taken from the rig on 2026-11-13); `actuator_parameters.json` is no longer tracked and the unused `syringe_pump_parameters_milk_30ml.json` is deleted. The rig's clone uses the files copied from the old folder.
 
 - **T19 [P0] Pi addresses in an ignored local config.** `Ubuntu/local_config.py` reads
   `Ubuntu/local_config.json` (ignored; `local_config.example.json` is tracked) for the tracking

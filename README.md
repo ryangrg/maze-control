@@ -63,9 +63,12 @@ maze-control/
 │   ├── main_ryan.py                 # Main PyQt5 GUI application
 │   ├── main_2c2s.py                 # GUI variant for 2c2s experiment design
 │   ├── MazeControl_ZMQ.py           # Device driver classes (Modbus + ZMQ)
-│   ├── MazeControl.db               # SQLite database (subjects, sessions, trials)
-│   ├── actuator_parameters.json     # Per-actuator PWM and timing calibration
-│   └── syringe_pump_parameters_milk_30ml.json  # Reward volume/speed calibration
+│   ├── local_config.py              # Reads local_config.json (machine-specific settings)
+│   ├── schema.sql                   # MazeControl.db schema
+│   ├── local_config.example.json                    # Pi addresses (copy to local_config.json)
+│   ├── actuator_parameters.example.json             # Per-actuator timing calibration
+│   ├── syringe_pump_parameters_list_30ml.example.json  # Reward volume/speed calibration
+│   └── state_variables_ryan.example.json            # Display/video process IDs (runtime state)
 │
 ├── Raspberry-Pi/
 │   ├── MotionTrack_ZeroMQ_picam2.py       # Camera + motion tracking (auto white balance)
@@ -282,6 +285,21 @@ cp Ubuntu/local_config.example.json Ubuntu/local_config.json
 | `display_a_host`, `display_b_host` | `MazeControl_ZMQ.StimulusDisplay`: launching and talking to the two display Pis |
 
 `main_ryan.py` stops with an error naming the file if it is missing. (`main_2c2s.py` is kept as it ran and still has its own addresses in the code.)
+
+The GUI also reads and rewrites three runtime files in `Ubuntu/`, which are ignored by git for the same reason: the rig's values belong to the rig. Each has a tracked `.example.json` to start from:
+
+| File | Holds |
+|---|---|
+| `actuator_parameters.json` | per-barrier move times (up, down), edited from the GUI |
+| `syringe_pump_parameters_list_30ml.json` | per-pump reward delivery settings |
+| `state_variables_ryan.json` | process IDs of the display and video programs on the Pis |
+
+On the rig, copy the current files from the folder sessions last ran from rather than the examples, so the calibration carries over. On a new machine:
+
+```bash
+cd Ubuntu
+for f in actuator_parameters syringe_pump_parameters_list_30ml state_variables_ryan; do cp -n $f.example.json $f.json; done
+```
 
 ## Database
 
